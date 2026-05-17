@@ -2,439 +2,762 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a1209" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>Domino Counter</title>
-  <link rel="manifest" href="manifest.json" />
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Domino Counter — Free</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --cream: #f5ead6; --dark: #1a1209; --amber: #c8882a; --gold: #e8b84b; --ivory: #fdf6e3; }
-    html, body { height: 100%; background: var(--dark); color: var(--cream); font-family: 'DM Sans', sans-serif; }
-    body { min-height: 100dvh; display: flex; flex-direction: column; background-image: radial-gradient(ellipse at 20% 10%, rgba(200,136,42,0.12) 0%, transparent 50%); }
+    :root {
+      --black:#0a0a0a; --white:#f5f0e8; --accent:#e8c547;
+      --accent-dark:#c9a83a; --muted:#888; --tile-bg:#f5f0e8;
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{
+      background:var(--black);color:var(--white);
+      font-family:'DM Sans',sans-serif;
+      height:100dvh;display:flex;flex-direction:column;
+      overflow:hidden;position:fixed;width:100%;
+    }
+    header{
+      display:flex;align-items:center;justify-content:space-between;
+      padding:14px 18px 10px;flex-shrink:0;z-index:10;
+    }
+    .logo{
+      font-family:'Space Mono',monospace;font-size:14px;font-weight:700;
+      display:flex;align-items:center;gap:8px;
+    }
+    .pip-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+    .badge{
+      background:rgba(232,197,71,.12);border:0.5px solid rgba(232,197,71,.3);
+      border-radius:20px;padding:4px 12px;font-size:11px;
+      color:var(--accent);font-family:'Space Mono',monospace;
+    }
+    .hdr-right{display:flex;gap:8px;align-items:center;}
+    .icon-btn{
+      width:36px;height:36px;border-radius:50%;
+      background:rgba(255,255,255,.07);border:0.5px solid rgba(255,255,255,.12);
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;color:rgba(255,255,255,.6);flex-shrink:0;
+    }
+    #camera-area{flex:1;position:relative;overflow:hidden;background:#111;}
+    #video{width:100%;height:100%;object-fit:cover;display:block;}
+    #overlay-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+    #capture-canvas{display:none;}
 
-    header { padding: 18px 20px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid rgba(200,136,42,0.18); }
-    .domino-icon { width: 38px; height: 22px; background: var(--ivory); border-radius: 5px; display: flex; align-items: center; position: relative; flex-shrink: 0; }
-    .domino-icon::before { content: ''; position: absolute; left: 50%; top: 3px; bottom: 3px; width: 1px; background: var(--dark); transform: translateX(-50%); }
-    .d-half { width: 50%; display: flex; align-items: center; justify-content: center; }
-    .mini-pip { width: 5px; height: 5px; border-radius: 50%; background: var(--dark); }
-    h1 { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--gold); }
-    .sub { font-size: 0.62rem; color: rgba(245,234,214,0.45); letter-spacing: 0.12em; text-transform: uppercase; font-family: 'DM Mono', monospace; }
+    .vf-corner{position:absolute;width:26px;height:26px;border-color:var(--accent);border-style:solid;border-width:0;}
+    .vf-corner.tl{top:20px;left:20px;border-top-width:3px;border-left-width:3px;border-top-left-radius:4px;}
+    .vf-corner.tr{top:20px;right:20px;border-top-width:3px;border-right-width:3px;border-top-right-radius:4px;}
+    .vf-corner.bl{bottom:20px;left:20px;border-bottom-width:3px;border-left-width:3px;border-bottom-left-radius:4px;}
+    .vf-corner.br{bottom:20px;right:20px;border-bottom-width:3px;border-right-width:3px;border-bottom-right-radius:4px;}
 
-    main { flex: 1; display: flex; flex-direction: column; padding: 16px 16px 32px; gap: 14px; max-width: 520px; margin: 0 auto; width: 100%; }
+    #hint-text{
+      position:absolute;bottom:26px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,.55);backdrop-filter:blur(4px);border-radius:20px;
+      padding:6px 16px;font-size:13px;color:rgba(255,255,255,.65);
+      white-space:nowrap;pointer-events:none;
+    }
+    #loading-overlay{
+      position:absolute;inset:0;background:rgba(0,0,0,.65);
+      display:none;align-items:center;justify-content:center;
+      flex-direction:column;gap:14px;backdrop-filter:blur(6px);
+    }
+    #loading-overlay.visible{display:flex;}
+    .spinner{
+      width:36px;height:36px;border:3px solid rgba(255,255,255,.1);
+      border-top-color:var(--accent);border-radius:50%;
+      animation:spin .75s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg);}}
+    .loading-text{font-family:'Space Mono',monospace;font-size:12px;color:rgba(255,255,255,.5);letter-spacing:1px;}
 
-    .score-banner { background: rgba(245,234,214,0.04); border: 1px solid rgba(200,136,42,0.22); border-radius: 18px; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
-    .score-label { font-family: 'DM Mono', monospace; font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(245,234,214,0.45); margin-bottom: 2px; }
-    .score-value { font-family: 'Playfair Display', serif; font-size: 2.8rem; font-weight: 900; color: var(--gold); line-height: 1; }
-    .score-tiles { font-family: 'DM Mono', monospace; font-size: 0.7rem; color: rgba(245,234,214,0.38); margin-top: 3px; }
-    .reset-btn { background: rgba(245,234,214,0.06); border: 1px solid rgba(200,136,42,0.18); border-radius: 10px; color: rgba(245,234,214,0.45); font-size: 0.72rem; font-family: 'DM Mono', monospace; padding: 8px 12px; cursor: pointer; transition: all 0.2s; }
-    .reset-btn:hover { color: var(--cream); }
+    #result-overlay{
+      position:absolute;bottom:0;left:0;right:0;padding:16px;
+      background:linear-gradient(to top,rgba(0,0,0,.95) 55%,transparent);
+      display:none;
+    }
+    #result-overlay.visible{display:block;}
+    .result-card{
+      background:rgba(12,12,12,.92);border:1px solid rgba(255,255,255,.1);
+      border-radius:20px;padding:18px;backdrop-filter:blur(16px);
+    }
+    .result-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+    .result-label{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2.5px;color:var(--accent);}
+    .dismiss-btn{
+      background:rgba(255,255,255,.07);border:none;color:rgba(255,255,255,.4);
+      width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:16px;
+      display:flex;align-items:center;justify-content:center;
+    }
+    .domino-vis{display:flex;justify-content:center;margin-bottom:14px;}
+    .domino-tile{
+      background:var(--tile-bg);border:3px solid #111;border-radius:12px;
+      width:110px;height:56px;display:flex;position:relative;
+      box-shadow:4px 4px 0 rgba(255,255,255,.06);
+    }
+    .domino-tile::after{
+      content:'';position:absolute;top:4px;bottom:4px;
+      left:50%;transform:translateX(-50%);width:2px;background:#111;
+    }
+    .domino-half{width:50%;height:100%;display:flex;align-items:center;justify-content:center;}
+    .pip-grid{display:grid;grid-template-columns:repeat(3,7px);grid-template-rows:repeat(3,7px);gap:2px;}
+    .pip-cell{width:7px;height:7px;}
+    .pip-cell.on{border-radius:50%;background:#111;}
+    .score-row{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:12px;}
+    .score-box{text-align:center;min-width:52px;}
+    .score-num{font-family:'Space Mono',monospace;font-size:38px;font-weight:700;line-height:1;}
+    .score-num.total{color:var(--accent);font-size:48px;}
+    .score-lbl{font-size:11px;color:var(--muted);margin-top:2px;}
+    .score-op{font-size:22px;color:rgba(255,255,255,.2);}
+    .result-note{
+      font-size:12px;color:rgba(255,255,255,.4);text-align:center;
+      border-top:0.5px solid rgba(255,255,255,.08);padding-top:10px;font-style:italic;
+    }
+    .bottom-bar{
+      flex-shrink:0;padding:14px 18px 22px;display:flex;
+      align-items:center;justify-content:space-between;gap:12px;
+      background:var(--black);z-index:10;
+    }
+    .side-btn{
+      width:48px;height:48px;border-radius:50%;
+      background:rgba(255,255,255,.07);border:0.5px solid rgba(255,255,255,.12);
+      display:flex;align-items:center;justify-content:center;
+      cursor:pointer;color:rgba(255,255,255,.6);flex-shrink:0;
+    }
+    #capture-btn{
+      flex:1;max-width:190px;height:62px;border-radius:31px;
+      background:var(--accent);border:none;color:var(--black);
+      font-family:'Space Mono',monospace;font-size:13px;font-weight:700;
+      cursor:pointer;display:flex;align-items:center;justify-content:center;
+      gap:8px;margin:0 auto;transition:transform .1s,background .15s;
+    }
+    #capture-btn:active{transform:scale(.96);background:var(--accent-dark);}
+    #capture-btn:disabled{opacity:.45;}
+    .cap-circle{width:18px;height:18px;border:2.5px solid var(--black);border-radius:50%;}
+    #upload-input{display:none;}
+    #no-camera-msg{
+      display:none;flex-direction:column;align-items:center;justify-content:center;
+      gap:12px;height:100%;text-align:center;padding:24px;
+    }
+    #no-camera-msg svg{opacity:.25;}
+    #no-camera-msg p{color:var(--muted);font-size:14px;line-height:1.6;}
+    #toast{
+      position:absolute;top:16px;left:50%;
+      transform:translateX(-50%) translateY(-80px);
+      background:#2a2a2a;color:var(--white);padding:10px 18px;
+      border-radius:20px;font-size:13px;transition:transform .3s;
+      white-space:nowrap;z-index:50;pointer-events:none;
+      border:0.5px solid rgba(255,255,255,.12);
+    }
+    #toast.show{transform:translateX(-50%) translateY(0);}
+    #history-modal{
+      position:fixed;inset:0;background:rgba(0,0,0,.75);
+      z-index:100;display:none;align-items:flex-end;
+    }
+    #history-modal.open{display:flex;}
+    .history-sheet{
+      background:#111;border-top-left-radius:24px;border-top-right-radius:24px;
+      width:100%;max-height:65dvh;overflow-y:auto;padding:20px 18px 36px;
+    }
+    .sheet-handle{width:36px;height:4px;background:rgba(255,255,255,.12);border-radius:2px;margin:0 auto 20px;}
+    .sheet-title{
+      font-family:'Space Mono',monospace;font-size:13px;color:var(--accent);
+      margin-bottom:14px;display:flex;justify-content:space-between;
+    }
+    .clear-btn{background:none;border:none;color:rgba(255,255,255,.3);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;}
+    .history-item{display:flex;align-items:center;gap:14px;padding:11px 0;border-bottom:0.5px solid rgba(255,255,255,.06);}
+    .h-total{font-family:'Space Mono',monospace;font-size:28px;font-weight:700;color:var(--accent);min-width:44px;}
+    .h-detail{flex:1;}
+    .h-halves{font-size:17px;font-weight:500;}
+    .h-time{font-size:12px;color:var(--muted);margin-top:2px;}
+    .history-empty{text-align:center;color:rgba(255,255,255,.25);font-size:14px;padding:36px 0;line-height:1.7;}
 
-    .camera-wrap { position: relative; border-radius: 18px; overflow: hidden; background: #0d0a05; border: 1px solid rgba(200,136,42,0.18); aspect-ratio: 4/3; display: flex; align-items: center; justify-content: center; }
-    #video { width: 100%; height: 100%; object-fit: cover; display: none; }
-    #preview { width: 100%; height: 100%; object-fit: cover; display: none; position: absolute; inset: 0; }
-    .placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; color: rgba(245,234,214,0.28); }
-    .placeholder svg { opacity: 0.5; }
-    .placeholder span { font-size: 0.8rem; font-family: 'DM Mono', monospace; }
-    .corner { position: absolute; width: 22px; height: 22px; border-color: var(--amber); border-style: solid; opacity: 0.5; }
-    .c-tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; border-radius: 3px 0 0 0; }
-    .c-tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; border-radius: 0 3px 0 0; }
-    .c-bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; border-radius: 0 0 0 3px; }
-    .c-br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; border-radius: 0 0 3px 0; }
-    .proc-overlay { position: absolute; inset: 0; background: rgba(26,18,9,0.82); display: none; flex-direction: column; align-items: center; justify-content: center; gap: 14px; }
-    .proc-overlay.show { display: flex; }
-    .spinner { width: 44px; height: 44px; border: 3px solid rgba(200,136,42,0.18); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .proc-text { font-family: 'DM Mono', monospace; font-size: 0.78rem; color: var(--gold); letter-spacing: 0.1em; }
-
-    .controls { display: flex; gap: 10px; }
-    .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 13px 14px; border-radius: 12px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 0.88rem; transition: all 0.18s; }
-    .btn-primary { background: linear-gradient(135deg, var(--amber), var(--gold)); color: var(--dark); }
-    .btn-secondary { background: rgba(245,234,214,0.07); color: var(--cream); border: 1px solid rgba(200,136,42,0.22); }
-    .btn:active { transform: scale(0.97); }
-
-    .settings-row { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(245,234,214,0.03); border: 1px solid rgba(200,136,42,0.12); border-radius: 12px; }
-    .settings-row label { font-family: 'DM Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(245,234,214,0.45); white-space: nowrap; }
-    .settings-row input[type=range] { flex: 1; accent-color: var(--amber); }
-    .settings-row span { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: var(--gold); min-width: 28px; text-align: right; }
-
-    .result-card { background: rgba(200,136,42,0.07); border: 1px solid rgba(200,136,42,0.3); border-radius: 16px; padding: 18px; display: none; flex-direction: column; gap: 12px; animation: up 0.3s ease; }
-    .result-card.show { display: flex; }
-    @keyframes up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-    .result-header { display: flex; align-items: center; justify-content: space-between; }
-    .result-label { font-family: 'DM Mono', monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--amber); }
-    .result-pts { font-family: 'Playfair Display', serif; font-size: 2.2rem; font-weight: 900; color: var(--gold); }
-    .tiles-row { display: flex; flex-wrap: wrap; gap: 7px; }
-    .tile-chip { background: var(--ivory); color: var(--dark); border-radius: 6px; padding: 4px 10px; font-family: 'DM Mono', monospace; font-size: 0.78rem; font-weight: 500; }
-    .result-note { font-size: 0.78rem; color: rgba(245,234,214,0.5); line-height: 1.6; }
-    .add-btn { background: linear-gradient(135deg, var(--amber), var(--gold)); color: var(--dark); border: none; border-radius: 10px; padding: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; font-size: 0.9rem; cursor: pointer; transition: all 0.18s; }
-
-    .tip-box { background: rgba(245,234,214,0.03); border: 1px solid rgba(200,136,42,0.12); border-radius: 12px; padding: 12px 14px; font-size: 0.78rem; color: rgba(245,234,214,0.45); line-height: 1.7; }
-    .tip-box strong { color: rgba(245,234,214,0.7); font-weight: 500; }
-
-    .history-label { font-family: 'DM Mono', monospace; font-size: 0.63rem; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(245,234,214,0.3); }
-    .h-item { background: rgba(245,234,214,0.03); border: 1px solid rgba(200,136,42,0.1); border-radius: 10px; padding: 9px 14px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-    .h-scan { color: rgba(245,234,214,0.4); font-family: 'DM Mono', monospace; font-size: 0.68rem; }
-    .h-pts { font-family: 'Playfair Display', serif; font-size: 1.1rem; color: var(--gold); }
-
-    .error-bar { background: rgba(180,50,50,0.14); border: 1px solid rgba(180,50,50,0.3); border-radius: 12px; padding: 12px 16px; font-size: 0.8rem; color: #f4a4a4; display: none; }
-    .error-bar.show { display: block; }
-    footer { text-align: center; padding: 10px; font-size: 0.62rem; color: rgba(245,234,214,0.18); font-family: 'DM Mono', monospace; }
-    #canvas { display: none; }
+    /* Tips panel */
+    #tips{
+      position:absolute;top:0;left:0;right:0;
+      background:rgba(10,10,10,.9);padding:14px 18px;
+      font-size:13px;color:rgba(255,255,255,.6);line-height:1.7;
+      backdrop-filter:blur(8px);display:none;z-index:30;
+    }
+    #tips strong{color:var(--accent);}
   </style>
 </head>
 <body>
 
 <header>
-  <div class="domino-icon">
-    <div class="d-half"><div class="mini-pip"></div></div>
-    <div class="d-half" style="gap:2px"><div class="mini-pip"></div><div class="mini-pip"></div></div>
-  </div>
-  <div>
-    <h1>Domino Counter</h1>
-    <div class="sub">On-device · Free · No account</div>
+  <div class="logo"><div class="pip-dot"></div>Lam Domino Counter</div>
+  <div class="hdr-right">
+    <div class="badge"></div>
+    <button class="icon-btn" id="tips-btn" title="Tips">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </button>
+    <button class="icon-btn" id="history-btn" title="History">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </button>
   </div>
 </header>
 
-<main>
-  <div class="score-banner">
-    <div>
-      <div class="score-label">Session Total</div>
-      <div class="score-value" id="total-score">0</div>
-      <div class="score-tiles" id="scan-count">0 scans</div>
+<div id="camera-area">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="overlay-canvas"></canvas>
+  <canvas id="capture-canvas"></canvas>
+
+  <div class="vf-corner tl"></div><div class="vf-corner tr"></div>
+  <div class="vf-corner bl"></div><div class="vf-corner br"></div>
+
+  <div id="tips">
+    <strong>Tips for best results:</strong><br>
+    · Use a standard white/cream domino on a dark surface (or vice-versa)<br>
+    · Hold steady — good lighting matters most<br>
+    · Fill the frame with the tile<br>
+    · Tap the ✕ to close this
+    <button onclick="document.getElementById('tips').style.display='none'" style="float:right;background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;margin-top:-4px;">✕</button>
+  </div>
+
+  <span id="hint-text">Frame a domino tile and tap Count Dots</span>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Analysing...</div>
+  </div>
+
+  <div id="result-overlay">
+    <div class="result-card">
+      <div class="result-header">
+        <div class="result-label">DOTS COUNTED</div>
+        <button class="dismiss-btn" id="dismiss-btn">×</button>
+      </div>
+      <div class="domino-vis">
+        <div class="domino-tile">
+          <div class="domino-half" id="left-vis"></div>
+          <div class="domino-half" id="right-vis"></div>
+        </div>
+      </div>
+      <div class="score-row">
+        <div class="score-box">
+          <div class="score-num" id="left-num">-</div>
+          <div class="score-lbl">left</div>
+        </div>
+        <div class="score-op">+</div>
+        <div class="score-box">
+          <div class="score-num" id="right-num">-</div>
+          <div class="score-lbl">right</div>
+        </div>
+        <div class="score-op">=</div>
+        <div class="score-box">
+          <div class="score-num total" id="total-num">-</div>
+          <div class="score-lbl">total</div>
+        </div>
+      </div>
+      <div class="result-note" id="result-note">100% on-device · no internet needed</div>
     </div>
-    <button class="reset-btn" onclick="resetSession()">Reset</button>
   </div>
 
-  <div class="camera-wrap">
-    <video id="video" playsinline autoplay muted></video>
-    <img id="preview" alt="Captured" />
-    <div class="corner c-tl"></div><div class="corner c-tr"></div>
-    <div class="corner c-bl"></div><div class="corner c-br"></div>
-    <div class="placeholder" id="placeholder">
-      <svg width="44" height="44" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.4" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
-        <circle cx="12" cy="13" r="3" stroke-width="1.4"/>
-      </svg>
-      <span>Camera inactive</span>
+  <div id="no-camera-msg">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    <p>Camera not available.<br>Use the upload button to analyse a photo.</p>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<div class="bottom-bar">
+  <label class="side-btn" for="upload-input" title="Upload photo">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+  </label>
+  <input type="file" id="upload-input" accept="image/*">
+
+  <button id="capture-btn">
+    <div class="cap-circle"></div>
+    Count Dots
+  </button>
+
+  <button class="side-btn" id="flip-btn" title="Flip camera">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+  </button>
+</div>
+
+<div id="history-modal">
+  <div class="history-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Scan history</span>
+      <button class="clear-btn" id="clear-btn">Clear all</button>
     </div>
-    <div class="proc-overlay" id="proc-overlay">
-      <div class="spinner"></div>
-      <div class="proc-text">Detecting pips...</div>
-    </div>
-  </div>
-
-  <div class="controls">
-    <button class="btn btn-secondary" id="cam-btn" onclick="toggleCamera()">📷 Camera</button>
-    <button class="btn btn-primary" id="snap-btn" onclick="snapAndCount()" style="display:none">Count Pips →</button>
-    <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none" onchange="handleUpload(event)" />
-    <button class="btn btn-secondary" onclick="document.getElementById('file-input').click()">🖼 Upload</button>
-  </div>
-
-  <div class="settings-row">
-    <label>Sensitivity</label>
-    <input type="range" id="threshold" min="20" max="120" value="60" step="1" oninput="document.getElementById('thresh-val').textContent=this.value" />
-    <span id="thresh-val">60</span>
-  </div>
-
-  <canvas id="canvas"></canvas>
-  <div class="error-bar" id="error-bar"></div>
-
-  <div class="result-card" id="result-card">
-    <div class="result-header">
-      <div class="result-label">This scan</div>
-      <div class="result-pts" id="result-pts">—</div>
-    </div>
-    <div class="tiles-row" id="tiles-row"></div>
-    <div class="result-note" id="result-note"></div>
-    <button class="add-btn" id="add-btn" onclick="addToTotal()">+ Add to Total</button>
-  </div>
-
-  <div class="tip-box">
-    <strong>Best results:</strong> Place tiles on a dark plain surface. Ensure bright even lighting with no glare. Hold phone directly above. Tiles should not overlap. Adjust <strong>Sensitivity</strong> if pips are missed or over-counted.
-  </div>
-
-  <div id="history-section" style="display:none">
-    <div class="history-label" style="margin-bottom:8px">History</div>
     <div id="history-list"></div>
   </div>
-</main>
-
-<footer>100% on-device · No internet required after first load</footer>
+</div>
 
 <script>
-let stream = null, cameraOn = false;
-let sessionTotal = 0, scanCount = 0, history = [];
-let lastResult = null;
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let scanHistory = JSON.parse(localStorage.getItem('domino_h') || '[]');
+let cameraStream = null;
+let facingMode = 'environment';
+let busy = false;
 
-async function toggleCamera() {
-  if (cameraOn) { stopCam(); return; }
+// ═══════════════════════════════════════════════════════
+//  ELEMENTS
+// ═══════════════════════════════════════════════════════
+const video       = document.getElementById('video');
+const capCanvas   = document.getElementById('capture-canvas');
+const ovCanvas    = document.getElementById('overlay-canvas');
+const ovCtx       = ovCanvas.getContext('2d');
+const captureBtn  = document.getElementById('capture-btn');
+const uploadInput = document.getElementById('upload-input');
+const loadingOv   = document.getElementById('loading-overlay');
+const resultOv    = document.getElementById('result-overlay');
+const dismissBtn  = document.getElementById('dismiss-btn');
+const hintText    = document.getElementById('hint-text');
+const noCamMsg    = document.getElementById('no-camera-msg');
+const histModal   = document.getElementById('history-modal');
+const histList    = document.getElementById('history-list');
+const toast       = document.getElementById('toast');
+
+// ═══════════════════════════════════════════════════════
+//  CAMERA
+// ═══════════════════════════════════════════════════════
+async function startCamera() {
+  if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1440 } }
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
-    const v = document.getElementById('video');
-    v.srcObject = stream; v.style.display = 'block';
-    document.getElementById('placeholder').style.display = 'none';
-    document.getElementById('preview').style.display = 'none';
-    cameraOn = true;
-    document.getElementById('cam-btn').textContent = '⏹ Stop';
-    document.getElementById('snap-btn').style.display = 'flex';
-    clearResult(); showError('');
-  } catch(e) { showError('Camera access denied — use Upload instead.'); }
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    noCamMsg.style.display = 'none';
+    captureBtn.disabled = false;
+  } catch {
+    video.style.display = 'none';
+    noCamMsg.style.display = 'flex';
+    captureBtn.disabled = true;
+  }
+}
+startCamera();
+
+document.getElementById('flip-btn').addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+});
+
+video.addEventListener('loadedmetadata', syncOverlay);
+window.addEventListener('resize', syncOverlay);
+function syncOverlay() {
+  const r = video.getBoundingClientRect();
+  ovCanvas.width = r.width;
+  ovCanvas.height = r.height;
 }
 
-function stopCam() {
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = null; cameraOn = false;
-  document.getElementById('video').style.display = 'none';
-  document.getElementById('cam-btn').textContent = '📷 Camera';
-  document.getElementById('snap-btn').style.display = 'none';
-}
+// ═══════════════════════════════════════════════════════
+//  CAPTURE / UPLOAD
+// ═══════════════════════════════════════════════════════
+captureBtn.addEventListener('click', () => {
+  if (busy) return;
+  const ctx = capCanvas.getContext('2d');
+  capCanvas.width  = video.videoWidth  || 640;
+  capCanvas.height = video.videoHeight || 480;
+  ctx.drawImage(video, 0, 0);
+  analyse(capCanvas);
+});
 
-function snapAndCount() {
-  const v = document.getElementById('video');
-  const c = document.getElementById('canvas');
-  c.width = v.videoWidth; c.height = v.videoHeight;
-  c.getContext('2d').drawImage(v, 0, 0);
-  const prev = document.getElementById('preview');
-  prev.src = c.toDataURL('image/jpeg', 0.92);
-  prev.style.display = 'block';
-  v.style.display = 'none';
-  stopCam();
-  processCanvas(c);
-}
-
-function handleUpload(e) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      const c = document.getElementById('canvas');
-      const maxDim = 1600;
-      let w = img.width, h = img.height;
-      if (w > maxDim || h > maxDim) { const r = Math.min(maxDim/w, maxDim/h); w = Math.round(w*r); h = Math.round(h*r); }
-      c.width = w; c.height = h;
-      c.getContext('2d').drawImage(img, 0, 0, w, h);
-      const prev = document.getElementById('preview');
-      prev.src = ev.target.result; prev.style.display = 'block';
-      document.getElementById('placeholder').style.display = 'none';
-      processCanvas(c);
-    };
-    img.src = ev.target.result;
+uploadInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    capCanvas.width  = img.width;
+    capCanvas.height = img.height;
+    capCanvas.getContext('2d').drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    analyse(capCanvas);
   };
-  reader.readAsDataURL(file);
-  e.target.value = '';
-}
+  img.src = url;
+  uploadInput.value = '';
+});
 
-function processCanvas(canvas) {
-  clearResult(); showError('');
-  document.getElementById('proc-overlay').classList.add('show');
-  setTimeout(() => {
-    try { showResult(detectPips(canvas)); }
-    catch(err) { showError('Detection error: ' + err.message); }
-    finally { document.getElementById('proc-overlay').classList.remove('show'); }
-  }, 80);
-}
+// ═══════════════════════════════════════════════════════
+//  ANALYSIS PIPELINE
+// ═══════════════════════════════════════════════════════
+async function analyse(src) {
+  if (busy) return;
+  busy = true;
+  resultOv.classList.remove('visible');
+  hintText.style.display = 'none';
+  loadingOv.classList.add('visible');
+  captureBtn.disabled = true;
+  await tick();
 
-function detectPips(canvas) {
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const data = ctx.getImageData(0, 0, w, h).data;
-  const threshold = parseInt(document.getElementById('threshold').value);
-
-  // Grayscale
-  const gray = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    gray[i] = Math.round(0.299*data[i*4] + 0.587*data[i*4+1] + 0.114*data[i*4+2]);
-  }
-
-  // Adaptive threshold via box blur
-  const r = Math.max(12, Math.round(Math.min(w,h)/28));
-  const blurred = boxBlur(gray, w, h, r);
-  const binary = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    binary[i] = (blurred[i] - gray[i]) > threshold ? 1 : 0;
-  }
-
-  // Connected components
-  const blobs = connectedComponents(binary, w, h);
-  if (!blobs.length) return { tiles: [], total: 0, note: 'No blobs found. Try better lighting or adjust sensitivity.' };
-
-  // Filter by area and circularity
-  const areas = blobs.map(b => b.length).sort((a,b) => a-b);
-  const med = areas[Math.floor(areas.length/2)];
-  const minA = Math.max(4, med * 0.18), maxA = med * 6;
-
-  const pips = blobs.filter(b => {
-    const a = b.length;
-    return a >= minA && a <= maxA && circularity(b, w) > 0.22;
-  });
-
-  if (!pips.length) return { tiles: [], total: 0, note: 'No pip shapes found. Try a darker surface or adjust sensitivity.' };
-
-  const avgArea = pips.reduce((s,p) => s+p.length, 0) / pips.length;
-  const pipR = Math.sqrt(avgArea / Math.PI);
-  const clusterDist = pipR * 14;
-
-  const centroids = pips.map(b => centroid(b, w));
-  const clusters = clusterPoints(centroids, clusterDist);
-
-  const tiles = clusters.map(cluster => {
-    const xs = cluster.map(p=>p.x), ys = cluster.map(p=>p.y);
-    const spanX = Math.max(...xs)-Math.min(...xs), spanY = Math.max(...ys)-Math.min(...ys);
-    let half1, half2;
-    if (spanX >= spanY) {
-      const midX = (Math.min(...xs)+Math.max(...xs))/2;
-      half1 = cluster.filter(p=>p.x<=midX); half2 = cluster.filter(p=>p.x>midX);
+  try {
+    const res = detectDomino(src);
+    if (res.error) {
+      showToast(res.error);
+      hintText.style.display = '';
     } else {
-      const midY = (Math.min(...ys)+Math.max(...ys))/2;
-      half1 = cluster.filter(p=>p.y<=midY); half2 = cluster.filter(p=>p.y>midY);
+      showResult(res.left, res.right, res.note);
     }
-    return { left: half1.length, right: half2.length };
-  });
-
-  const total = tiles.reduce((s,t) => s+t.left+t.right, 0);
-  return { tiles, total, note: `${pips.length} pips across ${tiles.length} tile${tiles.length!==1?'s':''}. Adjust sensitivity if counts seem off.` };
+  } catch (e) {
+    showToast('Analysis failed — try better lighting.');
+    hintText.style.display = '';
+  } finally {
+    loadingOv.classList.remove('visible');
+    captureBtn.disabled = false;
+    busy = false;
+  }
 }
 
-function boxBlur(gray, w, h, r) {
-  const horiz = new Float32Array(w*h);
-  for (let y = 0; y < h; y++) {
-    let sum = 0, cnt = 0;
-    for (let x = 0; x < Math.min(r,w); x++) { sum+=gray[y*w+x]; cnt++; }
-    for (let x = 0; x < w; x++) {
-      if (x+r<w) { sum+=gray[y*w+x+r]; cnt++; }
-      if (x-r-1>=0) { sum-=gray[y*w+x-r-1]; cnt--; }
-      horiz[y*w+x] = sum/cnt;
-    }
+function tick() { return new Promise(r => setTimeout(r, 40)); }
+
+// ═══════════════════════════════════════════════════════
+//  COMPUTER VISION — PIP COUNTER
+// ═══════════════════════════════════════════════════════
+function detectDomino(src) {
+  const W = src.width, H = src.height;
+  const raw = src.getContext('2d').getImageData(0, 0, W, H).data;
+
+  // ── 1. Grayscale ──────────────────────────────────────
+  const gray = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    gray[i] = (raw[i*4]*77 + raw[i*4+1]*150 + raw[i*4+2]*29) >> 8;
   }
-  const out = new Float32Array(w*h);
-  for (let x = 0; x < w; x++) {
-    let sum = 0, cnt = 0;
-    for (let y = 0; y < Math.min(r,h); y++) { sum+=horiz[y*w+x]; cnt++; }
-    for (let y = 0; y < h; y++) {
-      if (y+r<h) { sum+=horiz[(y+r)*w+x]; cnt++; }
-      if (y-r-1>=0) { sum-=horiz[(y-r-1)*w+x]; cnt--; }
-      out[y*w+x] = sum/cnt;
-    }
+
+  // ── 2. Locate tile: find the largest rectangular bright/dark region ─────
+  //    We down-sample 4× for speed, then threshold at a contrast boundary
+  const DS = 4;
+  const sw = Math.floor(W / DS), sh = Math.floor(H / DS);
+  const small = new Uint8Array(sw * sh);
+  for (let y = 0; y < sh; y++)
+    for (let x = 0; x < sw; x++)
+      small[y * sw + x] = gray[y * DS * W + x * DS];
+
+  // Global mean
+  let gSum = 0;
+  for (let i = 0; i < small.length; i++) gSum += small[i];
+  const gMean = gSum / small.length;
+
+  // Try to find bright region first (white/cream tile)
+  let tileThresh = Math.min(gMean + 25, 210);
+  let tileMask = threshold(small, sw, sh, tileThresh, true);
+  let tileBB   = largestBlob(tileMask, sw, sh);
+
+  // If that region is too small, try dark tile (ebony/novelty domino)
+  if (!tileBB || tileBB.w < sw * 0.1 || tileBB.h < sh * 0.08) {
+    tileThresh = Math.max(gMean - 25, 30);
+    tileMask   = threshold(small, sw, sh, tileThresh, false);
+    tileBB     = largestBlob(tileMask, sw, sh);
   }
+
+  if (!tileBB || tileBB.w < 4 || tileBB.h < 2) {
+    return { error: 'No tile found. Ensure contrast between tile & surface.' };
+  }
+
+  // Scale bounding box back to full res with small margin
+  const M  = DS * 2;
+  const x1 = Math.max(0, tileBB.x1 * DS - M);
+  const y1 = Math.max(0, tileBB.y1 * DS - M);
+  const x2 = Math.min(W - 1, tileBB.x2 * DS + M);
+  const y2 = Math.min(H - 1, tileBB.y2 * DS + M);
+  const tw = x2 - x1, th = y2 - y1;
+
+  if (tw < 30 || th < 15) return { error: 'Tile too small in frame. Move closer.' };
+
+  // ── 3. Extract tile ROI ──────────────────────────────
+  const roi = new Uint8Array(tw * th);
+  for (let y = 0; y < th; y++)
+    for (let x = 0; x < tw; x++)
+      roi[y * tw + x] = gray[(y1 + y) * W + (x1 + x)];
+
+  // ── 4. Determine pip polarity ────────────────────────
+  let roiSum = 0;
+  for (let i = 0; i < roi.length; i++) roiSum += roi[i];
+  const roiMean = roiSum / roi.length;
+  const darkPips = roiMean > 100; // tile is bright → pips are dark
+
+  // ── 5. Threshold to isolate pips ────────────────────
+  // Use Otsu-like split: dark pips = below mean-offset, bright pips = above
+  const pipBias = 40;
+  const pipThresh = darkPips
+    ? Math.max(roiMean - pipBias, 20)
+    : Math.min(roiMean + pipBias, 235);
+
+  const pipMask = threshold(roi, tw, th, pipThresh, !darkPips /* bright if not darkPips */);
+
+  // ── 6. Morphological open: erode then dilate to kill noise ──────────────
+  const eroded  = erode(pipMask, tw, th);
+  const opened  = dilate(eroded, tw, th);
+
+  // ── 7. Find blobs ────────────────────────────────────
+  const allBlobs = findBlobs(opened, tw, th);
+
+  // ── 8. Filter by size & shape to keep only pips ─────
+  const tileArea  = tw * th;
+  const minArea   = Math.max(6, tileArea / 2500);
+  const maxArea   = tileArea / 14;
+
+  const pips = allBlobs.filter(b => {
+    if (b.area < minArea || b.area > maxArea) return false;
+    // Aspect ratio: pips should be roughly circular
+    const ar = b.bw / (b.bh || 1);
+    if (ar > 3 || ar < 0.33) return false;
+    // Circularity: 4π·A / P² ≈ 1 for perfect circle
+    const circ = (4 * Math.PI * b.area) / (b.perim * b.perim + 1);
+    return circ > 0.18;
+  });
+
+  // ── 9. Split into halves ─────────────────────────────
+  const isLandscape = tw >= th;
+  const split = isLandscape ? tw / 2 : th / 2;
+  let left = 0, right = 0;
+
+  for (const p of pips) {
+    const pos = isLandscape ? p.cx : p.cy;
+    if (pos < split) left++; else right++;
+  }
+
+  left  = Math.min(6, Math.max(0, left));
+  right = Math.min(6, Math.max(0, right));
+
+  // ── 10. Draw overlay ─────────────────────────────────
+  drawDebugOverlay(x1, y1, x2, y2, isLandscape, pips, src);
+
+  const quality = pips.length === left + right ? 'good' : 'approx';
+  const note = `${pips.length} pip${pips.length !== 1 ? 's' : ''} detected · ${darkPips ? 'dark' : 'light'} pips · ${quality} read`;
+  return { left, right, note };
+}
+
+// ─── Image processing helpers ───────────────────────────────────────────────
+function threshold(src, w, h, thresh, keepAbove) {
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < src.length; i++)
+    out[i] = keepAbove ? (src[i] > thresh ? 1 : 0) : (src[i] < thresh ? 1 : 0);
   return out;
 }
 
-function connectedComponents(binary, w, h) {
-  const labels = new Int32Array(w*h).fill(-1);
-  const blobs = [];
-  const stack = [];
-  for (let i = 0; i < w*h; i++) {
-    if (!binary[i] || labels[i]!==-1) continue;
-    const blob = [];
-    stack.push(i); labels[i] = blobs.length;
-    while (stack.length) {
-      const idx = stack.pop(); blob.push(idx);
-      const x=idx%w, y=(idx/w)|0;
-      const ns = [];
-      if (x>0) ns.push(idx-1); if (x<w-1) ns.push(idx+1);
-      if (y>0) ns.push(idx-w); if (y<h-1) ns.push(idx+w);
-      for (const n of ns) { if (binary[n] && labels[n]===-1) { labels[n]=blobs.length; stack.push(n); } }
+function erode(src, w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 1; y < h-1; y++)
+    for (let x = 1; x < w-1; x++) {
+      const i = y*w+x;
+      out[i] = src[i] && src[i-1] && src[i+1] && src[i-w] && src[i+w] ? 1 : 0;
     }
-    blobs.push(blob);
-  }
-  return blobs;
+  return out;
 }
 
-function centroid(blob, w) {
-  let sx=0, sy=0;
-  for (const p of blob) { sx+=p%w; sy+=(p/w)|0; }
-  return { x: sx/blob.length, y: sy/blob.length };
+function dilate(src, w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 1; y < h-1; y++)
+    for (let x = 1; x < w-1; x++) {
+      const i = y*w+x;
+      if (src[i] || src[i-1] || src[i+1] || src[i-w] || src[i+w]) out[i] = 1;
+    }
+  return out;
 }
 
-function circularity(blob, w) {
-  if (blob.length < 4) return 0;
-  const set = new Set(blob);
-  let perim = 0;
-  for (const p of blob) {
-    if (!set.has(p-1)||!set.has(p+1)||!set.has(p-w)||!set.has(p+w)) perim++;
-  }
-  return perim ? (4*Math.PI*blob.length)/(perim*perim) : 0;
-}
+function largestBlob(mask, w, h) {
+  const visited = new Uint8Array(w * h);
+  let best = null;
 
-function clusterPoints(pts, maxDist) {
-  const visited = new Array(pts.length).fill(false);
-  const clusters = [];
-  for (let i = 0; i < pts.length; i++) {
-    if (visited[i]) continue;
-    const cluster = [pts[i]]; visited[i] = true;
-    let qi = 0;
-    while (qi < cluster.length) {
-      const cur = cluster[qi++];
-      for (let j = 0; j < pts.length; j++) {
-        if (visited[j]) continue;
-        const dx=pts[j].x-cur.x, dy=pts[j].y-cur.y;
-        if (Math.sqrt(dx*dx+dy*dy) < maxDist) { cluster.push(pts[j]); visited[j]=true; }
+  for (let sy = 0; sy < h; sy++) {
+    for (let sx = 0; sx < w; sx++) {
+      const si = sy * w + sx;
+      if (!mask[si] || visited[si]) continue;
+      // BFS
+      const q = [si]; visited[si] = 1;
+      let head = 0;
+      let mnX = sx, mnY = sy, mxX = sx, mxY = sy, cnt = 0;
+      while (head < q.length) {
+        const cur = q[head++]; cnt++;
+        const cy = Math.floor(cur / w), cx = cur % w;
+        if (cx < mnX) mnX = cx; if (cx > mxX) mxX = cx;
+        if (cy < mnY) mnY = cy; if (cy > mxY) mxY = cy;
+        for (const n of [cur-1, cur+1, cur-w, cur+w]) {
+          if (n >= 0 && n < w*h && !visited[n] && mask[n]) { visited[n] = 1; q.push(n); }
+        }
+      }
+      if (!best || cnt > best.cnt) {
+        best = { x1: mnX, y1: mnY, x2: mxX, y2: mxY, w: mxX-mnX+1, h: mxY-mnY+1, cnt };
       }
     }
-    clusters.push(cluster);
   }
-  return clusters;
+  return best;
 }
 
-function showResult(data) {
-  lastResult = data;
-  document.getElementById('result-pts').textContent = data.total;
-  const row = document.getElementById('tiles-row');
-  row.innerHTML = '';
-  (data.tiles||[]).forEach(t => {
-    const chip = document.createElement('div');
-    chip.className = 'tile-chip';
-    chip.textContent = `${t.left}|${t.right}`;
-    row.appendChild(chip);
-  });
-  document.getElementById('result-note').textContent = data.note||'';
-  document.getElementById('add-btn').style.display = data.total>0?'block':'none';
-  document.getElementById('result-card').classList.add('show');
+function findBlobs(mask, w, h) {
+  const labels  = new Int32Array(w * h);
+  const results = [];
+
+  for (let sy = 0; sy < h; sy++) {
+    for (let sx = 0; sx < w; sx++) {
+      const si = sy * w + sx;
+      if (!mask[si] || labels[si]) continue;
+
+      const lbl = results.length + 1;
+      const q = [si]; labels[si] = lbl;
+      let head = 0;
+      let area = 0, perim = 0;
+      let sumCx = 0, sumCy = 0;
+      let mnX = sx, mnY = sy, mxX = sx, mxY = sy;
+
+      while (head < q.length) {
+        const cur = q[head++];
+        area++;
+        const cy = Math.floor(cur / w), cx = cur % w;
+        sumCx += cx; sumCy += cy;
+        if (cx < mnX) mnX = cx; if (cx > mxX) mxX = cx;
+        if (cy < mnY) mnY = cy; if (cy > mxY) mxY = cy;
+
+        let border = false;
+        for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = cx+dx, ny = cy+dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) { border = true; continue; }
+          const ni = ny*w+nx;
+          if (!mask[ni]) { border = true; continue; }
+          if (!labels[ni]) { labels[ni] = lbl; q.push(ni); }
+        }
+        if (border) perim++;
+      }
+
+      results.push({
+        area, perim,
+        cx: sumCx / area,
+        cy: sumCy / area,
+        bw: mxX - mnX + 1,
+        bh: mxY - mnY + 1
+      });
+    }
+  }
+  return results;
 }
 
-function clearResult() { document.getElementById('result-card').classList.remove('show'); lastResult=null; }
+// ─── Debug overlay drawn on the camera feed ─────────────────────────────────
+function drawDebugOverlay(x1, y1, x2, y2, isLandscape, pips, srcCanvas) {
+  syncOverlay();
+  ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
+  const vr = video.getBoundingClientRect();
+  const sx = vr.width  / srcCanvas.width;
+  const sy = vr.height / srcCanvas.height;
 
-function addToTotal() {
-  if (!lastResult) return;
-  sessionTotal += lastResult.total; scanCount++;
-  history.unshift({ pts: lastResult.total, time: new Date().toLocaleTimeString() });
-  document.getElementById('total-score').textContent = sessionTotal;
-  document.getElementById('scan-count').textContent = `${scanCount} scan${scanCount!==1?'s':''}`;
-  const btn = document.getElementById('add-btn');
-  btn.textContent = '✓ Added!'; btn.style.background='rgba(80,180,80,0.3)';
-  setTimeout(() => {
-    btn.textContent='+ Add to Total'; btn.style.background='';
-    clearResult();
-    document.getElementById('preview').style.display='none';
-    document.getElementById('placeholder').style.display='flex';
-  }, 1200);
-  const sec = document.getElementById('history-section');
-  sec.style.display = 'block';
-  document.getElementById('history-list').innerHTML = history.slice(0,8).map((h,i) =>
-    `<div class="h-item"><span class="h-scan">Scan #${scanCount-i} · ${h.time}</span><span class="h-pts">+${h.pts}</span></div>`
-  ).join('');
+  // Tile rect
+  ovCtx.strokeStyle = 'rgba(232,197,71,.85)';
+  ovCtx.lineWidth = 2;
+  ovCtx.setLineDash([]);
+  ovCtx.strokeRect(x1*sx, y1*sy, (x2-x1)*sx, (y2-y1)*sy);
+
+  // Dividing line
+  ovCtx.strokeStyle = 'rgba(232,197,71,.45)';
+  ovCtx.setLineDash([5, 5]);
+  ovCtx.beginPath();
+  if (isLandscape) {
+    const mx = (x1 + (x2-x1)/2) * sx;
+    ovCtx.moveTo(mx, y1*sy); ovCtx.lineTo(mx, y2*sy);
+  } else {
+    const my = (y1 + (y2-y1)/2) * sy;
+    ovCtx.moveTo(x1*sx, my); ovCtx.lineTo(x2*sx, my);
+  }
+  ovCtx.stroke();
+  ovCtx.setLineDash([]);
+
+  // Pip circles
+  for (const p of pips) {
+    const px = (x1 + p.cx) * sx;
+    const py = (y1 + p.cy) * sy;
+    const r  = Math.max(5, Math.sqrt(p.area * sx * sy) * 0.6);
+    ovCtx.strokeStyle = 'rgba(100,240,100,.9)';
+    ovCtx.lineWidth = 2;
+    ovCtx.beginPath();
+    ovCtx.arc(px, py, r, 0, Math.PI*2);
+    ovCtx.stroke();
+  }
 }
 
-function resetSession() {
-  if (!confirm('Reset session?')) return;
-  sessionTotal=0; scanCount=0; history=[];
-  document.getElementById('total-score').textContent='0';
-  document.getElementById('scan-count').textContent='0 scans';
-  document.getElementById('history-section').style.display='none';
-  clearResult();
-  document.getElementById('preview').style.display='none';
-  document.getElementById('placeholder').style.display='flex';
+// ═══════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════
+const PIP_POS = {
+  0: [],
+  1: [[1,1]],
+  2: [[0,0],[2,2]],
+  3: [[0,0],[1,1],[2,2]],
+  4: [[0,0],[0,2],[2,0],[2,2]],
+  5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
+  6: [[0,0],[0,1],[0,2],[2,0],[2,1],[2,2]]
+};
+
+function renderPips(containerId, n) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  const g = document.createElement('div'); g.className = 'pip-grid';
+  const filled = new Set((PIP_POS[n]||[]).map(([r,c])=>r*3+c));
+  for (let i = 0; i < 9; i++) {
+    const c = document.createElement('div');
+    c.className = 'pip-cell' + (filled.has(i) ? ' on' : '');
+    g.appendChild(c);
+  }
+  el.appendChild(g);
 }
 
-function showError(msg) {
-  const el=document.getElementById('error-bar');
-  el.textContent=msg; el.classList.toggle('show',!!msg);
+function showResult(left, right, note) {
+  document.getElementById('left-num').textContent  = left;
+  document.getElementById('right-num').textContent = right;
+  document.getElementById('total-num').textContent = left + right;
+  document.getElementById('result-note').textContent = note;
+  renderPips('left-vis',  left);
+  renderPips('right-vis', right);
+  resultOv.classList.add('visible');
+
+  scanHistory.unshift({ left, right, total: left+right, time: Date.now() });
+  if (scanHistory.length > 50) scanHistory.pop();
+  localStorage.setItem('domino_h', JSON.stringify(scanHistory));
+}
+
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3800);
+}
+
+dismissBtn.addEventListener('click', () => {
+  resultOv.classList.remove('visible');
+  hintText.style.display = '';
+  ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
+});
+
+// Tips
+document.getElementById('tips-btn').addEventListener('click', () => {
+  const t = document.getElementById('tips');
+  t.style.display = t.style.display === 'block' ? 'none' : 'block';
+});
+
+// ═══════════════════════════════════════════════════════
+//  HISTORY
+// ═══════════════════════════════════════════════════════
+document.getElementById('history-btn').addEventListener('click', () => {
+  renderHistory(); histModal.classList.add('open');
+});
+histModal.addEventListener('click', e => {
+  if (e.target === histModal) histModal.classList.remove('open');
+});
+document.getElementById('clear-btn').addEventListener('click', () => {
+  scanHistory = []; localStorage.removeItem('domino_h'); renderHistory();
+});
+
+function renderHistory() {
+  if (!scanHistory.length) {
+    histList.innerHTML = '<div class="history-empty">No scans yet.<br>Point camera at a domino tile<br>and tap Count Dots.</div>';
+    return;
+  }
+  histList.innerHTML = scanHistory.map(h => {
+    const d  = new Date(h.time);
+    const ts = d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const ds = d.toLocaleDateString([],{month:'short',day:'numeric'});
+    return `<div class="history-item">
+      <div class="h-total">${h.total}</div>
+      <div class="h-detail">
+        <div class="h-halves">${h.left} + ${h.right}</div>
+        <div class="h-time">${ds} · ${ts}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 </script>
 </body>
