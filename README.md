@@ -14,8 +14,6 @@ domino-counter/
 ---
 
 ## 🛡 Privacy & Security
-- API keys are stored only in the user's browser (localStorage)
-- Images are sent directly to Anthropic's API — not stored anywhere
 - No backend, no database, no accounts needed
 
 ---
@@ -34,4 +32,3 @@ domino-counter/
 ## 🐛 Troubleshooting
 - **Camera not working?** Use the Upload button instead (some browsers restrict camera)
 - **Wrong count?** Make sure tiles are well-lit and not overlapping
-- **API error?** Double-check your API key is correct and has credits
