@@ -1,0 +1,17 @@
+{
+  "name": "Domino Counter",
+  "short_name": "Dominoes",
+  "description": "Count domino pips using your camera and AI",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1209",
+  "theme_color": "#1a1209",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect width='192' height='192' fill='%231a1209'/><rect x='32' y='72' width='128' height='48' rx='8' fill='%23fdf6e3'/><line x1='96' y1='72' x2='96' y2='120' stroke='%231a1209' stroke-width='3'/><circle cx='68' cy='96' r='7' fill='%231a1209'/><circle cx='116' cy='88' r='7' fill='%231a1209'/><circle cx='132' cy='96' r='7' fill='%231a1209'/><circle cx='116' cy='104' r='7' fill='%231a1209'/></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
