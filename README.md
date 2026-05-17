@@ -1,6 +1,6 @@
 # 🁣 Domino Counter — Deployment Guide
 
-A mobile-first web app that uses Claude's vision AI to count domino pips from your camera.
+A mobile-first web app to count domino pips from your camera.
 
 ---
 
