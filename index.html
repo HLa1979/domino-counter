@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Domino Counter — Free</title>
+  <title>Domino Counter - Free</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -169,7 +169,6 @@
     .h-time{font-size:12px;color:var(--muted);margin-top:2px;}
     .history-empty{text-align:center;color:rgba(255,255,255,.25);font-size:14px;padding:36px 0;line-height:1.7;}
 
-    /* Tips panel */
     #tips{
       position:absolute;top:0;left:0;right:0;
       background:rgba(10,10,10,.9);padding:14px 18px;
@@ -204,11 +203,11 @@
 
   <div id="tips">
     <strong>Tips for best results:</strong><br>
-    · Use a standard white/cream domino on a dark surface (or vice-versa)<br>
-    · Hold steady — good lighting matters most<br>
-    · Fill the frame with the tile<br>
-    · Tap the ✕ to close this
-    <button onclick="document.getElementById('tips').style.display='none'" style="float:right;background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;margin-top:-4px;">✕</button>
+    * Use a standard white/cream domino on a dark surface (or vice versa)<br>
+    * Hold steady. Good lighting matters most<br>
+    * Fill the frame with the tile<br>
+    * Tap the x to close this
+    <button onclick="document.getElementById('tips').style.display='none'" style="float:right;background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;margin-top:-4px;">x</button>
   </div>
 
   <span id="hint-text">Frame a domino tile and tap Count Dots</span>
@@ -222,7 +221,7 @@
     <div class="result-card">
       <div class="result-header">
         <div class="result-label">DOTS COUNTED</div>
-        <button class="dismiss-btn" id="dismiss-btn">×</button>
+        <button class="dismiss-btn" id="dismiss-btn">x</button>
       </div>
       <div class="domino-vis">
         <div class="domino-tile">
@@ -246,7 +245,7 @@
           <div class="score-lbl">total</div>
         </div>
       </div>
-      <div class="result-note" id="result-note">100% on-device · no internet needed</div>
+      <div class="result-note" id="result-note">100% on-device. No internet needed</div>
     </div>
   </div>
 
@@ -286,17 +285,11 @@
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════════════
 let scanHistory = JSON.parse(localStorage.getItem('domino_h') || '[]');
 let cameraStream = null;
 let facingMode = 'environment';
 let busy = false;
 
-// ═══════════════════════════════════════════════════════
-//  ELEMENTS
-// ═══════════════════════════════════════════════════════
 const video       = document.getElementById('video');
 const capCanvas   = document.getElementById('capture-canvas');
 const ovCanvas    = document.getElementById('overlay-canvas');
@@ -312,9 +305,6 @@ const histModal   = document.getElementById('history-modal');
 const histList    = document.getElementById('history-list');
 const toast       = document.getElementById('toast');
 
-// ═══════════════════════════════════════════════════════
-//  CAMERA
-// ═══════════════════════════════════════════════════════
 async function startCamera() {
   if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
   try {
@@ -346,9 +336,6 @@ function syncOverlay() {
   ovCanvas.height = r.height;
 }
 
-// ═══════════════════════════════════════════════════════
-//  CAPTURE / UPLOAD
-// ═══════════════════════════════════════════════════════
 captureBtn.addEventListener('click', () => {
   if (busy) return;
   const ctx = capCanvas.getContext('2d');
@@ -374,9 +361,6 @@ uploadInput.addEventListener('change', e => {
   uploadInput.value = '';
 });
 
-// ═══════════════════════════════════════════════════════
-//  ANALYSIS PIPELINE
-// ═══════════════════════════════════════════════════════
 async function analyse(src) {
   if (busy) return;
   busy = true;
@@ -395,7 +379,8 @@ async function analyse(src) {
       showResult(res.left, res.right, res.note);
     }
   } catch (e) {
-    showToast('Analysis failed — try better lighting.');
+    console.error(e);
+    showToast('Analysis failed. Try better lighting.');
     hintText.style.display = '';
   } finally {
     loadingOv.classList.remove('visible');
@@ -406,107 +391,106 @@ async function analyse(src) {
 
 function tick() { return new Promise(r => setTimeout(r, 40)); }
 
-// ═══════════════════════════════════════════════════════
-//  COMPUTER VISION — PIP COUNTER
-// ═══════════════════════════════════════════════════════
 function detectDomino(src) {
   const W = src.width, H = src.height;
   const raw = src.getContext('2d').getImageData(0, 0, W, H).data;
 
-  // ── 1. Grayscale ──────────────────────────────────────
   const gray = new Uint8Array(W * H);
   for (let i = 0; i < W * H; i++) {
     gray[i] = (raw[i*4]*77 + raw[i*4+1]*150 + raw[i*4+2]*29) >> 8;
   }
 
-  // ── 2. Locate tile: find the largest rectangular bright/dark region ─────
-  //    We down-sample 4× for speed, then threshold at a contrast boundary
   const DS = 4;
   const sw = Math.floor(W / DS), sh = Math.floor(H / DS);
   const small = new Uint8Array(sw * sh);
-  for (let y = 0; y < sh; y++)
-    for (let x = 0; x < sw; x++)
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
       small[y * sw + x] = gray[y * DS * W + x * DS];
+    }
+  }
 
-  // Global mean
   let gSum = 0;
   for (let i = 0; i < small.length; i++) gSum += small[i];
   const gMean = gSum / small.length;
 
-  // Try to find bright region first (white/cream tile)
-  let tileThresh = Math.min(gMean + 25, 210);
-  let tileMask = threshold(small, sw, sh, tileThresh, true);
-  let tileBB   = largestBlob(tileMask, sw, sh);
+  const brightMask = threshold(small, sw, sh, Math.min(gMean + 25, 215), true);
+  const darkMask   = threshold(small, sw, sh, Math.max(gMean - 25, 35), false);
+  const brightTile = findBestTileBlob(brightMask, sw, sh);
+  const darkTile   = findBestTileBlob(darkMask, sw, sh);
 
-  // If that region is too small, try dark tile (ebony/novelty domino)
-  if (!tileBB || tileBB.w < sw * 0.1 || tileBB.h < sh * 0.08) {
-    tileThresh = Math.max(gMean - 25, 30);
-    tileMask   = threshold(small, sw, sh, tileThresh, false);
-    tileBB     = largestBlob(tileMask, sw, sh);
+  let tileBB = null;
+  let tileIsBright = true;
+  if (brightTile && (!darkTile || brightTile.score >= darkTile.score * 0.92)) {
+    tileBB = brightTile;
+    tileIsBright = true;
+  } else if (darkTile) {
+    tileBB = darkTile;
+    tileIsBright = false;
   }
 
   if (!tileBB || tileBB.w < 4 || tileBB.h < 2) {
-    return { error: 'No tile found. Ensure contrast between tile & surface.' };
+    return { error: 'No tile found. Ensure contrast between tile and surface.' };
   }
 
-  // Scale bounding box back to full res with small margin
   const M  = DS * 2;
   const x1 = Math.max(0, tileBB.x1 * DS - M);
   const y1 = Math.max(0, tileBB.y1 * DS - M);
   const x2 = Math.min(W - 1, tileBB.x2 * DS + M);
   const y2 = Math.min(H - 1, tileBB.y2 * DS + M);
-  const tw = x2 - x1, th = y2 - y1;
+  const tw = x2 - x1;
+  const th = y2 - y1;
 
   if (tw < 30 || th < 15) return { error: 'Tile too small in frame. Move closer.' };
 
-  // ── 3. Extract tile ROI ──────────────────────────────
   const roi = new Uint8Array(tw * th);
-  for (let y = 0; y < th; y++)
-    for (let x = 0; x < tw; x++)
+  for (let y = 0; y < th; y++) {
+    for (let x = 0; x < tw; x++) {
       roi[y * tw + x] = gray[(y1 + y) * W + (x1 + x)];
+    }
+  }
 
-  // ── 4. Determine pip polarity ────────────────────────
   let roiSum = 0;
   for (let i = 0; i < roi.length; i++) roiSum += roi[i];
   const roiMean = roiSum / roi.length;
-  const darkPips = roiMean > 100; // tile is bright → pips are dark
-
-  // ── 5. Threshold to isolate pips ────────────────────
-  // Use Otsu-like split: dark pips = below mean-offset, bright pips = above
-  const pipBias = 40;
+  const darkPips = tileIsBright || roiMean > 110;
+  const otsu = otsuThreshold(roi);
   const pipThresh = darkPips
-    ? Math.max(roiMean - pipBias, 20)
-    : Math.min(roiMean + pipBias, 235);
+    ? clamp(Math.min(roiMean - 22, otsu + 12), 12, 225)
+    : clamp(Math.max(roiMean + 22, otsu - 12), 30, 245);
 
-  const pipMask = threshold(roi, tw, th, pipThresh, !darkPips /* bright if not darkPips */);
-
-  // ── 6. Morphological open: erode then dilate to kill noise ──────────────
-  const eroded  = erode(pipMask, tw, th);
-  const opened  = dilate(eroded, tw, th);
-
-  // ── 7. Find blobs ────────────────────────────────────
+  const pipMask = threshold(roi, tw, th, pipThresh, !darkPips);
+  const opened  = dilate(erode(pipMask, tw, th), tw, th);
   const allBlobs = findBlobs(opened, tw, th);
 
-  // ── 8. Filter by size & shape to keep only pips ─────
-  const tileArea  = tw * th;
-  const minArea   = Math.max(6, tileArea / 2500);
-  const maxArea   = tileArea / 14;
-
-  const pips = allBlobs.filter(b => {
-    if (b.area < minArea || b.area > maxArea) return false;
-    // Aspect ratio: pips should be roughly circular
-    const ar = b.bw / (b.bh || 1);
-    if (ar > 3 || ar < 0.33) return false;
-    // Circularity: 4π·A / P² ≈ 1 for perfect circle
-    const circ = (4 * Math.PI * b.area) / (b.perim * b.perim + 1);
-    return circ > 0.18;
-  });
-
-  // ── 9. Split into halves ─────────────────────────────
   const isLandscape = tw >= th;
   const split = isLandscape ? tw / 2 : th / 2;
-  let left = 0, right = 0;
+  const minDim = Math.min(tw, th);
+  const minArea = Math.max(6, Math.PI * Math.pow(minDim * 0.018, 2));
+  const maxArea = Math.max(minArea + 4, Math.PI * Math.pow(minDim * 0.12, 2));
+  const edgeMargin = Math.max(3, minDim * 0.055);
+  const dividerMargin = Math.max(2, minDim * 0.04);
 
+  const pipCandidates = allBlobs.filter(b => {
+    if (b.area < minArea || b.area > maxArea) return false;
+    if (b.cx < edgeMargin || b.cx > tw - edgeMargin) return false;
+    if (b.cy < edgeMargin || b.cy > th - edgeMargin) return false;
+
+    const splitPos = isLandscape ? b.cx : b.cy;
+    if (Math.abs(splitPos - split) < dividerMargin) return false;
+
+    const ar = b.bw / (b.bh || 1);
+    if (ar > 2.4 || ar < 0.42) return false;
+
+    const fill = b.area / Math.max(1, b.bw * b.bh);
+    if (fill < 0.35) return false;
+
+    const circ = (4 * Math.PI * b.area) / (b.perim * b.perim + 1);
+    return circ > 0.20;
+  });
+
+  const pips = mergeNearbyBlobs(pipCandidates, minDim * 0.08);
+
+  let left = 0, right = 0;
   for (const p of pips) {
     const pos = isLandscape ? p.cx : p.cy;
     if (pos < split) left++; else right++;
@@ -515,65 +499,137 @@ function detectDomino(src) {
   left  = Math.min(6, Math.max(0, left));
   right = Math.min(6, Math.max(0, right));
 
-  // ── 10. Draw overlay ─────────────────────────────────
   drawDebugOverlay(x1, y1, x2, y2, isLandscape, pips, src);
 
-  const quality = pips.length === left + right ? 'good' : 'approx';
-  const note = `${pips.length} pip${pips.length !== 1 ? 's' : ''} detected · ${darkPips ? 'dark' : 'light'} pips · ${quality} read`;
+  const quality = pips.length === left + right ? 'good' : 'clamped';
+  const note = `${pips.length} pip${pips.length !== 1 ? 's' : ''} detected | ${darkPips ? 'dark' : 'light'} pips | ${quality} read`;
   return { left, right, note };
 }
 
-// ─── Image processing helpers ───────────────────────────────────────────────
 function threshold(src, w, h, thresh, keepAbove) {
   const out = new Uint8Array(w * h);
-  for (let i = 0; i < src.length; i++)
+  for (let i = 0; i < src.length; i++) {
     out[i] = keepAbove ? (src[i] > thresh ? 1 : 0) : (src[i] < thresh ? 1 : 0);
+  }
   return out;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function otsuThreshold(src) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < src.length; i++) hist[src[i]]++;
+
+  let total = src.length;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+  let sumB = 0;
+  let wB = 0;
+  let best = 128;
+  let bestVar = -1;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * Math.pow(mB - mF, 2);
+    if (between > bestVar) {
+      bestVar = between;
+      best = t;
+    }
+  }
+  return best;
 }
 
 function erode(src, w, h) {
   const out = new Uint8Array(w * h);
-  for (let y = 1; y < h-1; y++)
+  for (let y = 1; y < h-1; y++) {
     for (let x = 1; x < w-1; x++) {
       const i = y*w+x;
       out[i] = src[i] && src[i-1] && src[i+1] && src[i-w] && src[i+w] ? 1 : 0;
     }
+  }
   return out;
 }
 
 function dilate(src, w, h) {
   const out = new Uint8Array(w * h);
-  for (let y = 1; y < h-1; y++)
+  for (let y = 1; y < h-1; y++) {
     for (let x = 1; x < w-1; x++) {
       const i = y*w+x;
       if (src[i] || src[i-1] || src[i+1] || src[i-w] || src[i+w]) out[i] = 1;
     }
+  }
   return out;
 }
 
-function largestBlob(mask, w, h) {
+function findBestTileBlob(mask, w, h) {
   const visited = new Uint8Array(w * h);
+  const frameArea = w * h;
   let best = null;
 
   for (let sy = 0; sy < h; sy++) {
     for (let sx = 0; sx < w; sx++) {
       const si = sy * w + sx;
       if (!mask[si] || visited[si]) continue;
-      // BFS
-      const q = [si]; visited[si] = 1;
+
+      const q = [si];
+      visited[si] = 1;
       let head = 0;
       let mnX = sx, mnY = sy, mxX = sx, mxY = sy, cnt = 0;
+
       while (head < q.length) {
-        const cur = q[head++]; cnt++;
+        const cur = q[head++];
+        cnt++;
         const cy = Math.floor(cur / w), cx = cur % w;
         if (cx < mnX) mnX = cx; if (cx > mxX) mxX = cx;
         if (cy < mnY) mnY = cy; if (cy > mxY) mxY = cy;
-        for (const n of [cur-1, cur+1, cur-w, cur+w]) {
-          if (n >= 0 && n < w*h && !visited[n] && mask[n]) { visited[n] = 1; q.push(n); }
+
+        for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          const n = ny * w + nx;
+          if (!visited[n] && mask[n]) {
+            visited[n] = 1;
+            q.push(n);
+          }
         }
       }
-      if (!best || cnt > best.cnt) {
-        best = { x1: mnX, y1: mnY, x2: mxX, y2: mxY, w: mxX-mnX+1, h: mxY-mnY+1, cnt };
+
+      const bw = mxX - mnX + 1;
+      const bh = mxY - mnY + 1;
+      const bboxArea = bw * bh;
+      const areaFrac = cnt / frameArea;
+      const fill = cnt / Math.max(1, bboxArea);
+      const aspect = Math.max(bw / Math.max(1, bh), bh / Math.max(1, bw));
+
+      if (bw < 8 || bh < 4) continue;
+      if (areaFrac < 0.006 || areaFrac > 0.82) continue;
+      if (aspect < 1.25 || aspect > 5.5) continue;
+      if (fill < 0.30) continue;
+
+      const cx = (mnX + mxX) / 2;
+      const cy = (mnY + mxY) / 2;
+      const centerDist = Math.hypot(cx / w - 0.5, cy / h - 0.5);
+      const aspectScore = 1 - Math.min(Math.abs(aspect - 2.0) / 3.5, 0.85);
+      const fillScore = Math.min(fill / 0.72, 1);
+      const centerScore = 1 - Math.min(centerDist / 0.75, 0.85);
+      const sizeScore = areaFrac < 0.04
+        ? areaFrac / 0.04
+        : areaFrac > 0.50
+          ? Math.max(0.2, 1 - (areaFrac - 0.50) / 0.32)
+          : 1;
+      const score = aspectScore * fillScore * centerScore * sizeScore;
+
+      if (!best || score > best.score) {
+        best = { x1: mnX, y1: mnY, x2: mxX, y2: mxY, w: bw, h: bh, cnt, score };
       }
     }
   }
@@ -627,39 +683,86 @@ function findBlobs(mask, w, h) {
   return results;
 }
 
-// ─── Debug overlay drawn on the camera feed ─────────────────────────────────
+function mergeNearbyBlobs(blobs, maxDist) {
+  const used = new Uint8Array(blobs.length);
+  const merged = [];
+  const maxDistSq = maxDist * maxDist;
+
+  for (let i = 0; i < blobs.length; i++) {
+    if (used[i]) continue;
+
+    used[i] = 1;
+    let area = blobs[i].area;
+    let perim = blobs[i].perim;
+    let sumX = blobs[i].cx * blobs[i].area;
+    let sumY = blobs[i].cy * blobs[i].area;
+    let bw = blobs[i].bw;
+    let bh = blobs[i].bh;
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      const cx = sumX / area;
+      const cy = sumY / area;
+      for (let j = 0; j < blobs.length; j++) {
+        if (used[j]) continue;
+        const dx = blobs[j].cx - cx;
+        const dy = blobs[j].cy - cy;
+        if (dx * dx + dy * dy <= maxDistSq) {
+          used[j] = 1;
+          changed = true;
+          area += blobs[j].area;
+          perim += blobs[j].perim;
+          sumX += blobs[j].cx * blobs[j].area;
+          sumY += blobs[j].cy * blobs[j].area;
+          bw = Math.max(bw, blobs[j].bw);
+          bh = Math.max(bh, blobs[j].bh);
+        }
+      }
+    }
+
+    merged.push({
+      area, perim,
+      cx: sumX / area,
+      cy: sumY / area,
+      bw, bh
+    });
+  }
+
+  return merged;
+}
+
 function drawDebugOverlay(x1, y1, x2, y2, isLandscape, pips, srcCanvas) {
   syncOverlay();
   ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
   const vr = video.getBoundingClientRect();
-  const sx = vr.width  / srcCanvas.width;
-  const sy = vr.height / srcCanvas.height;
+  const fit = coverTransform(srcCanvas.width, srcCanvas.height, vr.width, vr.height);
 
-  // Tile rect
+  function tx(x) { return fit.offsetX + x * fit.scale; }
+  function ty(y) { return fit.offsetY + y * fit.scale; }
+
   ovCtx.strokeStyle = 'rgba(232,197,71,.85)';
   ovCtx.lineWidth = 2;
   ovCtx.setLineDash([]);
-  ovCtx.strokeRect(x1*sx, y1*sy, (x2-x1)*sx, (y2-y1)*sy);
+  ovCtx.strokeRect(tx(x1), ty(y1), (x2-x1)*fit.scale, (y2-y1)*fit.scale);
 
-  // Dividing line
   ovCtx.strokeStyle = 'rgba(232,197,71,.45)';
   ovCtx.setLineDash([5, 5]);
   ovCtx.beginPath();
   if (isLandscape) {
-    const mx = (x1 + (x2-x1)/2) * sx;
-    ovCtx.moveTo(mx, y1*sy); ovCtx.lineTo(mx, y2*sy);
+    const mx = x1 + (x2-x1)/2;
+    ovCtx.moveTo(tx(mx), ty(y1)); ovCtx.lineTo(tx(mx), ty(y2));
   } else {
-    const my = (y1 + (y2-y1)/2) * sy;
-    ovCtx.moveTo(x1*sx, my); ovCtx.lineTo(x2*sx, my);
+    const my = y1 + (y2-y1)/2;
+    ovCtx.moveTo(tx(x1), ty(my)); ovCtx.lineTo(tx(x2), ty(my));
   }
   ovCtx.stroke();
   ovCtx.setLineDash([]);
 
-  // Pip circles
   for (const p of pips) {
-    const px = (x1 + p.cx) * sx;
-    const py = (y1 + p.cy) * sy;
-    const r  = Math.max(5, Math.sqrt(p.area * sx * sy) * 0.6);
+    const px = tx(x1 + p.cx);
+    const py = ty(y1 + p.cy);
+    const r  = Math.max(5, Math.sqrt(p.area) * fit.scale * 0.6);
     ovCtx.strokeStyle = 'rgba(100,240,100,.9)';
     ovCtx.lineWidth = 2;
     ovCtx.beginPath();
@@ -668,9 +771,15 @@ function drawDebugOverlay(x1, y1, x2, y2, isLandscape, pips, srcCanvas) {
   }
 }
 
-// ═══════════════════════════════════════════════════════
-//  UI HELPERS
-// ═══════════════════════════════════════════════════════
+function coverTransform(srcW, srcH, dstW, dstH) {
+  const scale = Math.max(dstW / srcW, dstH / srcH);
+  return {
+    scale,
+    offsetX: (dstW - srcW * scale) / 2,
+    offsetY: (dstH - srcH * scale) / 2
+  };
+}
+
 const PIP_POS = {
   0: [],
   1: [[1,1]],
@@ -722,15 +831,11 @@ dismissBtn.addEventListener('click', () => {
   ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
 });
 
-// Tips
 document.getElementById('tips-btn').addEventListener('click', () => {
   const t = document.getElementById('tips');
   t.style.display = t.style.display === 'block' ? 'none' : 'block';
 });
 
-// ═══════════════════════════════════════════════════════
-//  HISTORY
-// ═══════════════════════════════════════════════════════
 document.getElementById('history-btn').addEventListener('click', () => {
   renderHistory(); histModal.classList.add('open');
 });
@@ -754,7 +859,7 @@ function renderHistory() {
       <div class="h-total">${h.total}</div>
       <div class="h-detail">
         <div class="h-halves">${h.left} + ${h.right}</div>
-        <div class="h-time">${ds} · ${ts}</div>
+        <div class="h-time">${ds} * ${ts}</div>
       </div>
     </div>`;
   }).join('');
