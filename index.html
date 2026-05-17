@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Lam Domino Counter v1.2</title>
+  <title>Domino Counter — Free</title>
   <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
@@ -183,7 +183,7 @@
 <body>
 
 <header>
-  <div class="logo"><div class="pip-dot"></div>Lam Domino Counter v1.2</div>
+  <div class="logo"><div class="pip-dot"></div>Lam Domino Counter</div>
   <div class="hdr-right">
     <div class="badge"></div>
     <button class="icon-btn" id="tips-btn" title="Tips">
@@ -198,3 +198,1042 @@
 <div id="camera-area">
   <video id="video" autoplay playsinline muted></video>
   <canvas id="overlay-canvas"></canvas>
+  <canvas id="capture-canvas"></canvas>
+
+  <div class="vf-corner tl"></div><div class="vf-corner tr"></div>
+  <div class="vf-corner bl"></div><div class="vf-corner br"></div>
+
+  <div id="tips">
+    <strong>Tips for best results:</strong><br>
+    · Use a standard white/cream domino on a dark surface (or vice-versa)<br>
+    · Hold steady — good lighting matters most<br>
+    · Fill the frame with the tile<br>
+    · Tap the ✕ to close this
+    <button onclick="document.getElementById('tips').style.display='none'" style="float:right;background:none;border:none;color:rgba(255,255,255,.4);font-size:18px;cursor:pointer;margin-top:-4px;">✕</button>
+  </div>
+
+  <span id="hint-text">Frame a domino tile and tap Count Dots</span>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Analysing...</div>
+  </div>
+
+  <div id="result-overlay">
+    <div class="result-card">
+      <div class="result-header">
+        <div class="result-label">DOTS COUNTED</div>
+        <button class="dismiss-btn" id="dismiss-btn">×</button>
+      </div>
+      <div class="domino-vis">
+        <div class="domino-tile">
+          <div class="domino-half" id="left-vis"></div>
+          <div class="domino-half" id="right-vis"></div>
+        </div>
+      </div>
+      <div class="score-row">
+        <div class="score-box">
+          <div class="score-num" id="left-num">-</div>
+          <div class="score-lbl">left</div>
+        </div>
+        <div class="score-op">+</div>
+        <div class="score-box">
+          <div class="score-num" id="right-num">-</div>
+          <div class="score-lbl">right</div>
+        </div>
+        <div class="score-op">=</div>
+        <div class="score-box">
+          <div class="score-num total" id="total-num">-</div>
+          <div class="score-lbl">total</div>
+        </div>
+      </div>
+      <div class="result-note" id="result-note">100% on-device · no internet needed</div>
+    </div>
+  </div>
+
+  <div id="no-camera-msg">
+    <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    <p>Camera not available.<br>Use the upload button to analyse a photo.</p>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<div class="bottom-bar">
+  <label class="side-btn" for="upload-input" title="Upload photo">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+  </label>
+  <input type="file" id="upload-input" accept="image/*">
+
+  <button id="capture-btn">
+    <div class="cap-circle"></div>
+    Count Dots
+  </button>
+
+  <button class="side-btn" id="flip-btn" title="Flip camera">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+  </button>
+</div>
+
+<div id="history-modal">
+  <div class="history-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">
+      <span>Scan history</span>
+      <button class="clear-btn" id="clear-btn">Clear all</button>
+    </div>
+    <div id="history-list"></div>
+  </div>
+</div>
+
+<script>
+let scanHistory = JSON.parse(localStorage.getItem('domino_h') || '[]');
+let cameraStream = null;
+let facingMode = 'environment';
+let busy = false;
+
+const video       = document.getElementById('video');
+const capCanvas   = document.getElementById('capture-canvas');
+const ovCanvas    = document.getElementById('overlay-canvas');
+const ovCtx       = ovCanvas.getContext('2d');
+const captureBtn  = document.getElementById('capture-btn');
+const uploadInput = document.getElementById('upload-input');
+const loadingOv   = document.getElementById('loading-overlay');
+const resultOv    = document.getElementById('result-overlay');
+const dismissBtn  = document.getElementById('dismiss-btn');
+const hintText    = document.getElementById('hint-text');
+const noCamMsg    = document.getElementById('no-camera-msg');
+const histModal   = document.getElementById('history-modal');
+const histList    = document.getElementById('history-list');
+const toast       = document.getElementById('toast');
+
+async function startCamera() {
+  if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } }
+    });
+    video.srcObject = cameraStream;
+    video.style.display = 'block';
+    noCamMsg.style.display = 'none';
+    captureBtn.disabled = false;
+  } catch {
+    video.style.display = 'none';
+    noCamMsg.style.display = 'flex';
+    captureBtn.disabled = true;
+  }
+}
+startCamera();
+
+document.getElementById('flip-btn').addEventListener('click', () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  startCamera();
+});
+
+video.addEventListener('loadedmetadata', syncOverlay);
+window.addEventListener('resize', syncOverlay);
+function syncOverlay() {
+  const r = video.getBoundingClientRect();
+  ovCanvas.width = r.width;
+  ovCanvas.height = r.height;
+}
+
+captureBtn.addEventListener('click', () => {
+  if (busy) return;
+  const ctx = capCanvas.getContext('2d');
+  capCanvas.width  = video.videoWidth  || 640;
+  capCanvas.height = video.videoHeight || 480;
+  ctx.drawImage(video, 0, 0);
+  analyse(capCanvas);
+});
+
+uploadInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    capCanvas.width  = img.width;
+    capCanvas.height = img.height;
+    capCanvas.getContext('2d').drawImage(img, 0, 0);
+    URL.revokeObjectURL(url);
+    analyse(capCanvas);
+  };
+  img.src = url;
+  uploadInput.value = '';
+});
+
+async function analyse(src) {
+  if (busy) return;
+  busy = true;
+  resultOv.classList.remove('visible');
+  hintText.style.display = 'none';
+  loadingOv.classList.add('visible');
+  captureBtn.disabled = true;
+  await tick();
+
+  try {
+    const res = detectDomino(src);
+    if (res.error) {
+      showToast(res.error);
+      hintText.style.display = '';
+    } else {
+      showResult(res.left, res.right, res.note);
+    }
+  } catch (e) {
+    console.error(e);
+    showToast('Analysis failed — try better lighting.');
+    hintText.style.display = '';
+  } finally {
+    loadingOv.classList.remove('visible');
+    captureBtn.disabled = false;
+    busy = false;
+  }
+}
+
+function tick() { return new Promise(r => setTimeout(r, 40)); }
+
+function detectDomino(src) {
+  const W = src.width, H = src.height;
+  const raw = src.getContext('2d').getImageData(0, 0, W, H).data;
+
+  const gray = new Uint8Array(W * H);
+  const pipSignal = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const r = raw[i*4];
+    const g = raw[i*4+1];
+    const b = raw[i*4+2];
+    gray[i] = (r*77 + g*150 + b*29) >> 8;
+    const hi = Math.max(r, g, b);
+    const lo = Math.min(r, g, b);
+    const dark = 255 - hi;
+    const saturation = hi - lo;
+    pipSignal[i] = clamp(Math.round(Math.max(dark * 0.9, saturation * 1.25)), 0, 255);
+  }
+
+  const DS = 4;
+  const sw = Math.floor(W / DS), sh = Math.floor(H / DS);
+  const small = new Uint8Array(sw * sh);
+  for (let y = 0; y < sh; y++) {
+    for (let x = 0; x < sw; x++) {
+      small[y * sw + x] = gray[y * DS * W + x * DS];
+    }
+  }
+
+  let gSum = 0;
+  for (let i = 0; i < small.length; i++) gSum += small[i];
+  const gMean = gSum / small.length;
+
+  const brightMask = closeMask(threshold(small, sw, sh, Math.min(gMean + 25, 215), true), sw, sh, 2);
+  const darkMask   = closeMask(threshold(small, sw, sh, Math.max(gMean - 25, 35), false), sw, sh, 2);
+  const brightTile = findBestTileBlob(brightMask, sw, sh);
+  const darkTile   = findBestTileBlob(darkMask, sw, sh);
+
+  let tileBB = null;
+  let tileIsBright = true;
+  if (brightTile && (!darkTile || brightTile.score >= darkTile.score * 0.92)) {
+    tileBB = brightTile;
+    tileIsBright = true;
+  } else if (darkTile) {
+    tileBB = darkTile;
+    tileIsBright = false;
+  }
+
+  if (!tileBB || tileBB.w < 4 || tileBB.h < 2) {
+    return { error: 'No tile found. Ensure contrast between tile and surface.' };
+  }
+
+  const tile = extractOrientedTile(gray, pipSignal, W, H, tileBB, DS);
+  const tw = tile.w;
+  const th = tile.h;
+
+  if (tw < 30 || th < 15) return { error: 'Tile too small in frame. Move closer.' };
+
+  let roiSum = 0;
+  for (let i = 0; i < tile.data.length; i++) roiSum += tile.data[i];
+  const roiMean = roiSum / tile.data.length;
+  const darkPips = tileIsBright || roiMean > 110;
+
+  const blobRead = countPipsBySignal(tile.signal, tw, th, tile.body);
+  const layoutRead = readDominoByLayout(tile.data, tw, th, darkPips, tile.body);
+  const read = blobRead.total > 0 || layoutRead.left + layoutRead.right === 0
+    ? { ...blobRead, darkPips: true }
+    : layoutRead;
+  drawDebugOverlay(tile, read.pips, src);
+
+  const total = read.left + read.right;
+  const quality = read.confidence >= 0.62 ? 'good' : read.confidence >= 0.38 ? 'fair' : 'low contrast';
+  const note = `${total} pip${total !== 1 ? 's' : ''} detected | ${quality} read`;
+  return { left: read.left, right: read.right, note };
+}
+
+function extractOrientedTile(gray, pipSignal, W, H, tileBB, ds) {
+  const cx = tileBB.cx * ds;
+  const cy = tileBB.cy * ds;
+  const ux = tileBB.ux;
+  const uy = tileBB.uy;
+  const vx = tileBB.vx;
+  const vy = tileBB.vy;
+  const shortExtent = Math.max(40, tileBB.short * ds + ds * 7);
+  const longExtent = Math.max(shortExtent * 1.88, tileBB.long * ds + ds * 9);
+  const outH = Math.round(clamp(shortExtent, 72, 420));
+  const outW = outH * 2;
+  const data = new Uint8Array(outW * outH);
+  const signal = new Uint8Array(outW * outH);
+
+  for (let y = 0; y < outH; y++) {
+    const ny = ((y + 0.5) / outH - 0.5) * shortExtent;
+    for (let x = 0; x < outW; x++) {
+      const nx = ((x + 0.5) / outW - 0.5) * longExtent;
+      const sx = cx + ux * nx + vx * ny;
+      const sy = cy + uy * nx + vy * ny;
+      data[y * outW + x] = sampleBilinear(gray, W, H, sx, sy);
+      signal[y * outW + x] = sampleBilinear(pipSignal, W, H, sx, sy);
+    }
+  }
+
+  const bodyLong = clamp(tileBB.long * ds, longExtent * 0.70, longExtent);
+  const bodyShort = clamp(tileBB.short * ds, shortExtent * 0.70, shortExtent);
+  const bodyW = outW * (bodyLong / longExtent);
+  const bodyH = outH * (bodyShort / shortExtent);
+  const body = {
+    x: (outW - bodyW) / 2,
+    y: (outH - bodyH) / 2,
+    w: bodyW,
+    h: bodyH
+  };
+
+  return { data, signal, w: outW, h: outH, body, cx, cy, ux, uy, vx, vy, long: longExtent, short: shortExtent };
+}
+
+function countPipsBySignal(signal, w, h, body) {
+  const bodyValues = [];
+  const x1 = clamp(Math.floor(body.x), 0, w - 1);
+  const y1 = clamp(Math.floor(body.y), 0, h - 1);
+  const x2 = clamp(Math.ceil(body.x + body.w), 0, w);
+  const y2 = clamp(Math.ceil(body.y + body.h), 0, h);
+
+  for (let y = y1; y < y2; y++) {
+    for (let x = x1; x < x2; x++) {
+      bodyValues.push(signal[y * w + x]);
+    }
+  }
+
+  const mean = avg(bodyValues);
+  const variance = avg(bodyValues.map(v => Math.pow(v - mean, 2)));
+  const std = Math.sqrt(variance);
+  const thresh = clamp(Math.max(34, otsuThreshold(bodyValues), mean + std * 0.35), 28, 175);
+  const mask = new Uint8Array(w * h);
+
+  for (let y = y1; y < y2; y++) {
+    for (let x = x1; x < x2; x++) {
+      mask[y * w + x] = signal[y * w + x] > thresh ? 1 : 0;
+    }
+  }
+
+  const cleaned = closeMask(mask, w, h, 1);
+  const blobs = findBlobs(cleaned, w, h);
+  const halfW = body.w / 2;
+  const centerX = body.x + halfW;
+  const halfMin = Math.min(halfW, body.h);
+  const minArea = Math.max(14, Math.PI * Math.pow(halfMin * 0.032, 2));
+  const maxArea = Math.max(minArea + 10, Math.PI * Math.pow(halfMin * 0.19, 2));
+  const edgeMargin = Math.max(3, halfMin * 0.025);
+
+  const pips = blobs.filter(b => {
+    if (b.area < minArea || b.area > maxArea) return false;
+    if (b.cx < body.x + edgeMargin || b.cx > body.x + body.w - edgeMargin) return false;
+    if (b.cy < body.y + edgeMargin || b.cy > body.y + body.h - edgeMargin) return false;
+
+    const ar = b.bw / Math.max(1, b.bh);
+    if (ar > 2.25 || ar < 0.44) return false;
+
+    const fill = b.area / Math.max(1, b.bw * b.bh);
+    if (fill < 0.35) return false;
+
+    const circ = (4 * Math.PI * b.area) / (b.perim * b.perim + 1);
+    if (circ < 0.17) return false;
+
+    const nearDivider = Math.abs(b.cx - centerX) < halfMin * 0.045;
+    const tallOrWide = b.bh > body.h * 0.42 || b.bw > halfW * 0.42;
+    return !(nearDivider && tallOrWide);
+  });
+
+  const merged = mergeNearbyBlobs(pips, halfMin * 0.055);
+  let left = 0, right = 0;
+  for (const p of merged) {
+    if (p.cx < centerX) left++; else right++;
+  }
+
+  const confidence = merged.length
+    ? clamp((std - 8) / 38, 0.35, 1)
+    : 0.45;
+  return { left, right, total: left + right, confidence, pips: merged };
+}
+
+function readDominoByLayout(roi, w, h, preferredDarkPips, body = { x: 0, y: 0, w, h }) {
+  const darkRead = readLayoutWithPolarity(roi, w, h, true, body);
+  const lightRead = readLayoutWithPolarity(roi, w, h, false, body);
+  darkRead.confidence += preferredDarkPips ? 0.04 : 0;
+  lightRead.confidence += preferredDarkPips ? 0 : 0.04;
+
+  return darkRead.confidence >= lightRead.confidence
+    ? { ...darkRead, darkPips: true }
+    : { ...lightRead, darkPips: false };
+}
+
+function readLayoutWithPolarity(roi, w, h, darkPips, body) {
+  const left = readHalfByLayout(roi, w, h, 0, darkPips, body);
+  const right = readHalfByLayout(roi, w, h, 1, darkPips, body);
+  return {
+    left: left.value,
+    right: right.value,
+    confidence: (left.confidence + right.confidence) / 2,
+    pips: [...left.pips, ...right.pips]
+  };
+}
+
+function readHalfByLayout(roi, w, h, half, darkPips, body) {
+  const halfW = body.w / 2;
+  const halfX = body.x + half * halfW;
+  const top = body.y;
+  const halfH = body.h;
+  const halfMean = sampleRectMean(roi, w, h, halfX + halfW * 0.08, top + halfH * 0.08, halfW * 0.84, halfH * 0.84);
+  const size = Math.min(halfW, halfH);
+  const centerR = clamp(size * 0.045, 3, 13);
+  const ringInner = clamp(size * 0.085, centerR + 2, 22);
+  const ringOuter = clamp(size * 0.155, ringInner + 3, 34);
+  const xs = [0.255, 0.5, 0.745];
+  const ys = [0.255, 0.5, 0.745];
+  const spots = [];
+
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const x = halfX + halfW * xs[c];
+      const y = top + halfH * ys[r];
+      const center = sampleDiskMean(roi, w, h, x, y, centerR);
+      const ring = sampleRingMean(roi, w, h, x, y, ringInner, ringOuter);
+      const localContrast = darkPips ? ring - center : center - ring;
+      const globalContrast = darkPips ? halfMean - center : center - halfMean;
+      spots.push({
+        index: r * 3 + c,
+        x, y,
+        score: localContrast * 0.72 + globalContrast * 0.28
+      });
+    }
+  }
+
+  const best = classifyDominoHalf(spots);
+  const minVisibleScore = 7;
+  if (best.value > 0 && best.hitAvg < minVisibleScore && best.hitAvg - best.missAvg < 5) {
+    best.value = 0;
+    best.pattern = [];
+    best.confidence = 0.35;
+  }
+
+  const pips = best.pattern.map(index => {
+    const spot = spots[index];
+    return { cx: spot.x, cy: spot.y, area: Math.PI * centerR * centerR, score: spot.score };
+  });
+
+  return { value: best.value, confidence: best.confidence, pips };
+}
+
+function classifyDominoHalf(spots) {
+  let best = null;
+
+  for (let n = 0; n <= 6; n++) {
+    for (const pattern of getDominoPatternVariants(n)) {
+      const expected = new Set(pattern);
+      const hits = spots.filter(s => expected.has(s.index)).map(s => s.score);
+      const misses = spots.filter(s => !expected.has(s.index)).map(s => Math.max(0, s.score));
+      const hitAvg = hits.length ? avg(hits) : 0;
+      const hitMin = hits.length ? Math.min(...hits) : 0;
+      const missAvg = misses.length ? avg(misses) : 0;
+      const missMax = misses.length ? Math.max(...misses) : 0;
+      const score = n === 0
+        ? -missAvg - missMax * 0.25
+        : hitAvg + Math.min(hitAvg, hitMin) * 0.18 - missAvg * 0.72 - missMax * 0.18;
+
+      if (!best || score > best.score) {
+        best = { value: n, pattern, score, hitAvg, missAvg };
+      }
+    }
+  }
+
+  const separation = best.value === 0 ? 12 - best.missAvg : best.hitAvg - best.missAvg;
+  best.confidence = clamp((separation - 3) / 34, 0, 1);
+  return best;
+}
+
+function getDominoPatternVariants(n) {
+  const base = (PIP_POS[n] || []).map(([r, c]) => r * 3 + c);
+  if (!base.length) return [[]];
+
+  const variants = [];
+  const seen = new Set();
+  for (let rot = 0; rot < 4; rot++) {
+    const pattern = base.map(index => rotateGridIndex(index, rot)).sort((a, b) => a - b);
+    const key = pattern.join(',');
+    if (!seen.has(key)) {
+      seen.add(key);
+      variants.push(pattern);
+    }
+  }
+  return variants;
+}
+
+function rotateGridIndex(index, turns) {
+  let r = Math.floor(index / 3);
+  let c = index % 3;
+  for (let i = 0; i < turns; i++) {
+    const nr = c;
+    const nc = 2 - r;
+    r = nr;
+    c = nc;
+  }
+  return r * 3 + c;
+}
+
+function avg(values) {
+  if (!values.length) return 0;
+  return values.reduce((sum, n) => sum + n, 0) / values.length;
+}
+
+function sampleRectMean(data, w, h, x, y, rw, rh) {
+  const x1 = clamp(Math.floor(x), 0, w - 1);
+  const y1 = clamp(Math.floor(y), 0, h - 1);
+  const x2 = clamp(Math.ceil(x + rw), 0, w);
+  const y2 = clamp(Math.ceil(y + rh), 0, h);
+  let sum = 0, count = 0;
+  for (let yy = y1; yy < y2; yy++) {
+    for (let xx = x1; xx < x2; xx++) {
+      sum += data[yy * w + xx];
+      count++;
+    }
+  }
+  return count ? sum / count : 128;
+}
+
+function sampleDiskMean(data, w, h, cx, cy, r) {
+  const r2 = r * r;
+  const x1 = clamp(Math.floor(cx - r), 0, w - 1);
+  const y1 = clamp(Math.floor(cy - r), 0, h - 1);
+  const x2 = clamp(Math.ceil(cx + r), 0, w - 1);
+  const y2 = clamp(Math.ceil(cy + r), 0, h - 1);
+  let sum = 0, count = 0;
+
+  for (let y = y1; y <= y2; y++) {
+    for (let x = x1; x <= x2; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      if (dx * dx + dy * dy <= r2) {
+        sum += data[y * w + x];
+        count++;
+      }
+    }
+  }
+  return count ? sum / count : 128;
+}
+
+function sampleRingMean(data, w, h, cx, cy, innerR, outerR) {
+  const inner2 = innerR * innerR;
+  const outer2 = outerR * outerR;
+  const x1 = clamp(Math.floor(cx - outerR), 0, w - 1);
+  const y1 = clamp(Math.floor(cy - outerR), 0, h - 1);
+  const x2 = clamp(Math.ceil(cx + outerR), 0, w - 1);
+  const y2 = clamp(Math.ceil(cy + outerR), 0, h - 1);
+  let sum = 0, count = 0;
+
+  for (let y = y1; y <= y2; y++) {
+    for (let x = x1; x <= x2; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= inner2 && d2 <= outer2) {
+        sum += data[y * w + x];
+        count++;
+      }
+    }
+  }
+  return count ? sum / count : 128;
+}
+
+function sampleBilinear(data, w, h, x, y) {
+  x = clamp(x, 0, w - 1);
+  y = clamp(y, 0, h - 1);
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+  const x1 = Math.min(w - 1, x0 + 1);
+  const y1 = Math.min(h - 1, y0 + 1);
+  const dx = x - x0;
+  const dy = y - y0;
+  const a = data[y0 * w + x0];
+  const b = data[y0 * w + x1];
+  const c = data[y1 * w + x0];
+  const d = data[y1 * w + x1];
+  return Math.round(a * (1 - dx) * (1 - dy) + b * dx * (1 - dy) + c * (1 - dx) * dy + d * dx * dy);
+}
+
+function threshold(src, w, h, thresh, keepAbove) {
+  const out = new Uint8Array(w * h);
+  for (let i = 0; i < src.length; i++) {
+    out[i] = keepAbove ? (src[i] > thresh ? 1 : 0) : (src[i] < thresh ? 1 : 0);
+  }
+  return out;
+}
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function otsuThreshold(src) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < src.length; i++) hist[src[i]]++;
+
+  let total = src.length;
+  let sum = 0;
+  for (let i = 0; i < 256; i++) sum += i * hist[i];
+
+  let sumB = 0;
+  let wB = 0;
+  let best = 128;
+  let bestVar = -1;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * Math.pow(mB - mF, 2);
+    if (between > bestVar) {
+      bestVar = between;
+      best = t;
+    }
+  }
+  return best;
+}
+
+function erode(src, w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      const i = y*w+x;
+      out[i] = src[i] && src[i-1] && src[i+1] && src[i-w] && src[i+w] ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+function dilate(src, w, h) {
+  const out = new Uint8Array(w * h);
+  for (let y = 1; y < h-1; y++) {
+    for (let x = 1; x < w-1; x++) {
+      const i = y*w+x;
+      if (src[i] || src[i-1] || src[i+1] || src[i-w] || src[i+w]) out[i] = 1;
+    }
+  }
+  return out;
+}
+
+function closeMask(src, w, h, iterations = 1) {
+  let out = src;
+  for (let i = 0; i < iterations; i++) out = dilate(out, w, h);
+  for (let i = 0; i < iterations; i++) out = erode(out, w, h);
+  return out;
+}
+
+function findBestTileBlob(mask, w, h) {
+  const visited = new Uint8Array(w * h);
+  const frameArea = w * h;
+  let best = null;
+
+  for (let sy = 0; sy < h; sy++) {
+    for (let sx = 0; sx < w; sx++) {
+      const si = sy * w + sx;
+      if (!mask[si] || visited[si]) continue;
+
+      const q = [si];
+      visited[si] = 1;
+      let head = 0;
+      let mnX = sx, mnY = sy, mxX = sx, mxY = sy, cnt = 0;
+
+      while (head < q.length) {
+        const cur = q[head++];
+        cnt++;
+        const cy = Math.floor(cur / w), cx = cur % w;
+        if (cx < mnX) mnX = cx; if (cx > mxX) mxX = cx;
+        if (cy < mnY) mnY = cy; if (cy > mxY) mxY = cy;
+
+        for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = cx + dx, ny = cy + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          const n = ny * w + nx;
+          if (!visited[n] && mask[n]) {
+            visited[n] = 1;
+            q.push(n);
+          }
+        }
+      }
+
+      const bw = mxX - mnX + 1;
+      const bh = mxY - mnY + 1;
+      const bboxArea = bw * bh;
+      const areaFrac = cnt / frameArea;
+
+      let sumX = 0, sumY = 0;
+      for (const idx of q) {
+        sumX += idx % w;
+        sumY += Math.floor(idx / w);
+      }
+      const cx = sumX / cnt;
+      const cy = sumY / cnt;
+
+      let covXX = 0, covYY = 0, covXY = 0;
+      for (const idx of q) {
+        const px = idx % w;
+        const py = Math.floor(idx / w);
+        const dx = px - cx;
+        const dy = py - cy;
+        covXX += dx * dx;
+        covYY += dy * dy;
+        covXY += dx * dy;
+      }
+      covXX /= cnt;
+      covYY /= cnt;
+      covXY /= cnt;
+
+      const angle = 0.5 * Math.atan2(2 * covXY, covXX - covYY);
+      let ux = Math.cos(angle);
+      let uy = Math.sin(angle);
+      let vx = -uy;
+      let vy = ux;
+      let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+
+      for (const idx of q) {
+        const px = idx % w;
+        const py = Math.floor(idx / w);
+        const dx = px - cx;
+        const dy = py - cy;
+        const pu = dx * ux + dy * uy;
+        const pv = dx * vx + dy * vy;
+        if (pu < minU) minU = pu; if (pu > maxU) maxU = pu;
+        if (pv < minV) minV = pv; if (pv > maxV) maxV = pv;
+      }
+
+      let long = maxU - minU + 1;
+      let short = maxV - minV + 1;
+      if (short > long) {
+        const oldUx = ux;
+        const oldUy = uy;
+        ux = vx;
+        uy = vy;
+        vx = -oldUy;
+        vy = oldUx;
+        const oldLong = long;
+        long = short;
+        short = oldLong;
+      }
+
+      if ((Math.abs(ux) >= Math.abs(uy) && ux < 0) || (Math.abs(uy) > Math.abs(ux) && uy < 0)) {
+        ux = -ux;
+        uy = -uy;
+      }
+      vx = -uy;
+      vy = ux;
+
+      const fill = cnt / Math.max(1, long * short);
+      const aspect = long / Math.max(1, short);
+
+      if (bw < 8 || bh < 4) continue;
+      if (areaFrac < 0.006 || areaFrac > 0.82) continue;
+      if (aspect < 1.25 || aspect > 5.5) continue;
+      if (fill < 0.30) continue;
+
+      const centerDist = Math.hypot(cx / w - 0.5, cy / h - 0.5);
+      const aspectScore = 1 - Math.min(Math.abs(aspect - 2.0) / 3.5, 0.85);
+      const fillScore = Math.min(fill / 0.72, 1);
+      const centerScore = 1 - Math.min(centerDist / 0.75, 0.85);
+      const sizeScore = areaFrac < 0.04
+        ? areaFrac / 0.04
+        : areaFrac > 0.50
+          ? Math.max(0.2, 1 - (areaFrac - 0.50) / 0.32)
+          : 1;
+      const score = aspectScore * fillScore * centerScore * sizeScore;
+
+      if (!best || score > best.score) {
+        best = { x1: mnX, y1: mnY, x2: mxX, y2: mxY, w: bw, h: bh, cnt, score, cx, cy, ux, uy, vx, vy, long, short };
+      }
+    }
+  }
+  return best;
+}
+
+function findBlobs(mask, w, h) {
+  const labels  = new Int32Array(w * h);
+  const results = [];
+
+  for (let sy = 0; sy < h; sy++) {
+    for (let sx = 0; sx < w; sx++) {
+      const si = sy * w + sx;
+      if (!mask[si] || labels[si]) continue;
+
+      const lbl = results.length + 1;
+      const q = [si]; labels[si] = lbl;
+      let head = 0;
+      let area = 0, perim = 0;
+      let sumCx = 0, sumCy = 0;
+      let mnX = sx, mnY = sy, mxX = sx, mxY = sy;
+
+      while (head < q.length) {
+        const cur = q[head++];
+        area++;
+        const cy = Math.floor(cur / w), cx = cur % w;
+        sumCx += cx; sumCy += cy;
+        if (cx < mnX) mnX = cx; if (cx > mxX) mxX = cx;
+        if (cy < mnY) mnY = cy; if (cy > mxY) mxY = cy;
+
+        let border = false;
+        for (const [dx, dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx = cx+dx, ny = cy+dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) { border = true; continue; }
+          const ni = ny*w+nx;
+          if (!mask[ni]) { border = true; continue; }
+          if (!labels[ni]) { labels[ni] = lbl; q.push(ni); }
+        }
+        if (border) perim++;
+      }
+
+      results.push({
+        area, perim,
+        cx: sumCx / area,
+        cy: sumCy / area,
+        bw: mxX - mnX + 1,
+        bh: mxY - mnY + 1
+      });
+    }
+  }
+  return results;
+}
+
+function mergeNearbyBlobs(blobs, maxDist) {
+  const used = new Uint8Array(blobs.length);
+  const merged = [];
+  const maxDistSq = maxDist * maxDist;
+
+  for (let i = 0; i < blobs.length; i++) {
+    if (used[i]) continue;
+
+    used[i] = 1;
+    let area = blobs[i].area;
+    let perim = blobs[i].perim;
+    let sumX = blobs[i].cx * blobs[i].area;
+    let sumY = blobs[i].cy * blobs[i].area;
+    let bw = blobs[i].bw;
+    let bh = blobs[i].bh;
+    let changed = true;
+
+    while (changed) {
+      changed = false;
+      const cx = sumX / area;
+      const cy = sumY / area;
+      for (let j = 0; j < blobs.length; j++) {
+        if (used[j]) continue;
+        const dx = blobs[j].cx - cx;
+        const dy = blobs[j].cy - cy;
+        if (dx * dx + dy * dy <= maxDistSq) {
+          used[j] = 1;
+          changed = true;
+          area += blobs[j].area;
+          perim += blobs[j].perim;
+          sumX += blobs[j].cx * blobs[j].area;
+          sumY += blobs[j].cy * blobs[j].area;
+          bw = Math.max(bw, blobs[j].bw);
+          bh = Math.max(bh, blobs[j].bh);
+        }
+      }
+    }
+
+    merged.push({
+      area, perim,
+      cx: sumX / area,
+      cy: sumY / area,
+      bw, bh
+    });
+  }
+
+  return merged;
+}
+
+function drawDebugOverlay(tile, pips, srcCanvas) {
+  syncOverlay();
+  ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
+  const vr = video.getBoundingClientRect();
+  const fit = coverTransform(srcCanvas.width, srcCanvas.height, vr.width, vr.height);
+
+  function tx(x) { return fit.offsetX + x * fit.scale; }
+  function ty(y) { return fit.offsetY + y * fit.scale; }
+  function mp(x, y) {
+    const p = tilePointToSource(tile, x, y);
+    return { x: tx(p.x), y: ty(p.y) };
+  }
+
+  const c1 = mp(0, 0);
+  const c2 = mp(tile.w, 0);
+  const c3 = mp(tile.w, tile.h);
+  const c4 = mp(0, tile.h);
+  ovCtx.strokeStyle = 'rgba(232,197,71,.85)';
+  ovCtx.lineWidth = 2;
+  ovCtx.setLineDash([]);
+  ovCtx.beginPath();
+  ovCtx.moveTo(c1.x, c1.y);
+  ovCtx.lineTo(c2.x, c2.y);
+  ovCtx.lineTo(c3.x, c3.y);
+  ovCtx.lineTo(c4.x, c4.y);
+  ovCtx.closePath();
+  ovCtx.stroke();
+
+  ovCtx.strokeStyle = 'rgba(232,197,71,.45)';
+  ovCtx.setLineDash([5, 5]);
+  ovCtx.beginPath();
+  const d1 = mp(tile.w / 2, 0);
+  const d2 = mp(tile.w / 2, tile.h);
+  ovCtx.moveTo(d1.x, d1.y);
+  ovCtx.lineTo(d2.x, d2.y);
+  ovCtx.stroke();
+  ovCtx.setLineDash([]);
+
+  for (const p of pips) {
+    const pp = mp(p.cx, p.cy);
+    const sourceRadius = Math.sqrt(p.area) * (tile.short / tile.h);
+    const r  = Math.max(5, sourceRadius * fit.scale * 0.7);
+    ovCtx.strokeStyle = 'rgba(100,240,100,.9)';
+    ovCtx.lineWidth = 2;
+    ovCtx.beginPath();
+    ovCtx.arc(pp.x, pp.y, r, 0, Math.PI*2);
+    ovCtx.stroke();
+  }
+}
+
+function tilePointToSource(tile, x, y) {
+  const nx = (x / tile.w - 0.5) * tile.long;
+  const ny = (y / tile.h - 0.5) * tile.short;
+  return {
+    x: tile.cx + tile.ux * nx + tile.vx * ny,
+    y: tile.cy + tile.uy * nx + tile.vy * ny
+  };
+}
+
+function coverTransform(srcW, srcH, dstW, dstH) {
+  const scale = Math.max(dstW / srcW, dstH / srcH);
+  return {
+    scale,
+    offsetX: (dstW - srcW * scale) / 2,
+    offsetY: (dstH - srcH * scale) / 2
+  };
+}
+
+const PIP_POS = {
+  0: [],
+  1: [[1,1]],
+  2: [[0,0],[2,2]],
+  3: [[0,0],[1,1],[2,2]],
+  4: [[0,0],[0,2],[2,0],[2,2]],
+  5: [[0,0],[0,2],[1,1],[2,0],[2,2]],
+  6: [[0,0],[0,1],[0,2],[2,0],[2,1],[2,2]]
+};
+
+function renderPips(containerId, n) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  const g = document.createElement('div'); g.className = 'pip-grid';
+
+  if (n > 6) {
+    const cols = Math.ceil(Math.sqrt(n));
+    g.className = 'pip-grid many';
+    g.style.setProperty('--pip-cols', cols);
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement('div');
+      c.className = 'pip-cell on';
+      g.appendChild(c);
+    }
+    el.appendChild(g);
+    return;
+  }
+
+  const filled = new Set((PIP_POS[n]||[]).map(([r,c])=>r*3+c));
+  for (let i = 0; i < 9; i++) {
+    const c = document.createElement('div');
+    c.className = 'pip-cell' + (filled.has(i) ? ' on' : '');
+    g.appendChild(c);
+  }
+  el.appendChild(g);
+}
+
+function showResult(left, right, note) {
+  document.getElementById('left-num').textContent  = left;
+  document.getElementById('right-num').textContent = right;
+  document.getElementById('total-num').textContent = left + right;
+  document.getElementById('result-note').textContent = note;
+  renderPips('left-vis',  left);
+  renderPips('right-vis', right);
+  resultOv.classList.add('visible');
+
+  scanHistory.unshift({ left, right, total: left+right, time: Date.now() });
+  if (scanHistory.length > 50) scanHistory.pop();
+  localStorage.setItem('domino_h', JSON.stringify(scanHistory));
+}
+
+let toastTimer;
+function showToast(msg) {
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3800);
+}
+
+dismissBtn.addEventListener('click', () => {
+  resultOv.classList.remove('visible');
+  hintText.style.display = '';
+  ovCtx.clearRect(0, 0, ovCanvas.width, ovCanvas.height);
+});
+
+document.getElementById('tips-btn').addEventListener('click', () => {
+  const t = document.getElementById('tips');
+  t.style.display = t.style.display === 'block' ? 'none' : 'block';
+});
+
+document.getElementById('history-btn').addEventListener('click', () => {
+  renderHistory(); histModal.classList.add('open');
+});
+histModal.addEventListener('click', e => {
+  if (e.target === histModal) histModal.classList.remove('open');
+});
+document.getElementById('clear-btn').addEventListener('click', () => {
+  scanHistory = []; localStorage.removeItem('domino_h'); renderHistory();
+});
+
+function renderHistory() {
+  if (!scanHistory.length) {
+    histList.innerHTML = '<div class="history-empty">No scans yet.<br>Point camera at a domino tile<br>and tap Count Dots.</div>';
+    return;
+  }
+  histList.innerHTML = scanHistory.map(h => {
+    const d  = new Date(h.time);
+    const ts = d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    const ds = d.toLocaleDateString([],{month:'short',day:'numeric'});
+    return `<div class="history-item">
+      <div class="h-total">${h.total}</div>
+      <div class="h-detail">
+        <div class="h-halves">${h.left} + ${h.right}</div>
+        <div class="h-time">${ds} · ${ts}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>
