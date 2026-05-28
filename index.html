@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Mexican Train Counter</title>
+  <title>Lam Domino Game Counter v2.0</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -520,7 +520,7 @@
   <div id="cam-wrap">
     <div id="start-screen">
       <div class="icon">🁣</div>
-      <h2>Domino Counter</h2>
+      <h2>Lam Domino Game Counter v2.0</h2>
       <p>Point your camera at a domino tile to count its dots. Use the Scoreboard tab to track your game.</p>
       <button class="btn btn-capture" style="max-width:220px;margin-top:8px;flex:none" onclick="startCamera()">📷 Start Camera</button>
       <p style="font-size:12px;color:#555;margin-top:4px">Works best in good lighting</p>
@@ -602,11 +602,10 @@
     <button id="add-player-btn" onclick="addPlayerInput()">＋ Add Player</button>
 
     <div class="setup-row">
-      <label>Number of rounds</label>
+      <label>Domino set</label>
       <select id="rounds-select">
-        <option value="7">7 (Double-6 set)</option>
-        <option value="10">10 (Double-9 set)</option>
-        <option value="13" selected>13 (Double-12 set)</option>
+        <option value="13" selected>Double-12 · 13 rounds</option>
+        <option value="16">Double-15 · 16 rounds</option>
         <option value="0">Unlimited</option>
       </select>
     </div>
@@ -792,7 +791,10 @@ function analyzeCanvas(w,h) {
   const px = imgData.data;
   const area = w*h;
 
-  // ── 1. Background = avg of brightest 25% pixels (tile surface) ───────
+  // ── 1. Signal = RGB distance from tile background ─────────────────────
+  // Background estimated from brightest 25% of pixels (tile surface color).
+  // Using RGB distance instead of grayscale catches yellow, orange etc.
+  // which are nearly identical to white in luminance but very different in color.
   const bri = new Float32Array(area);
   for(let i=0;i<area;i++){const p=i<<2;bri[i]=(px[p]+px[p+1]+px[p+2])/3;}
   const sortedBri = Float32Array.from(bri).sort();
@@ -803,40 +805,62 @@ function analyzeCanvas(w,h) {
   }
   const bgR=rS/cnt, bgG=gS/cnt, bgB=bS/cnt;
 
-  // ── 2. Signal = RGB distance from tile background ─────────────────────
-  // Yellow (255,255,0) vs white (255,255,255) → distance 255.
-  // Pure grayscale would treat yellow as near-white and miss it.
   const sig = new Uint8Array(area);
   for(let i=0;i<area;i++){
     const p=i<<2, dr=px[p]-bgR, dg=px[p+1]-bgG, db=px[p+2]-bgB;
     sig[i]=Math.min(255, Math.sqrt(dr*dr+dg*dg+db*db)|0);
   }
 
-  // ── 3. Threshold ──────────────────────────────────────────────────────
-  let thresh = otsu(sig) + sensOffset;
-  thresh = Math.max(20, Math.min(240, thresh));
-  const bin = new Uint8Array(area);
-  for(let i=0;i<area;i++) bin[i] = sig[i]>=thresh ? 1 : 0;
-
-  // ── 4. Connected components ───────────────────────────────────────────
-  const blobs = cc(bin,w,h);
-
   // ════════════════════════════════════════════════════════════════════
   //  COUNT-ALL MODE  — photograph all remaining tiles at once
+  //
+  //  Pipeline:
+  //   blur → adaptive threshold → morph close → components → size cluster
+  //
+  //  Key improvements over split mode:
+  //  • Box blur removes sensor noise before thresholding
+  //  • Adaptive (local) threshold handles uneven lighting across tiles
+  //  • Morphological closing fills specular highlight "rings" so they
+  //    are detected as solid circles instead of being filtered out
+  //  • Log-histogram clustering finds the dot-size peak regardless of
+  //    how close or far the camera is
   // ════════════════════════════════════════════════════════════════════
   if (scanMode === 'countAll') {
-    // Shape-only pre-filter (no fixed size range — tiles may be at any distance)
+
+    // Step A: Box blur (separable, r=2) — smooths noise before thresholding
+    const blurred = boxBlur(sig, w, h, 2);
+
+    // Step B: Adaptive threshold (Bradley method with integral image).
+    //   Window = 1/7 of image width; sensitivity tunable via slider.
+    //   Unlike global Otsu, this handles tiles in varying light conditions.
+    const adaptK = Math.max(0.05, Math.min(0.40, 0.18 - sensOffset * 0.004));
+    const binRaw = adaptiveThreshold(blurred, w, h, 1/7, adaptK);
+
+    // Step C: Morphological closing (dilate r=2 then erode r=2).
+    //   Dots on rounded domino surfaces often have a specular highlight at
+    //   the centre, making them appear as rings rather than solid circles.
+    //   Closing fills those gaps so the blob filter keeps them.
+    const binClosed = morphClose(binRaw, w, h, 2);
+
+    // Step D: Connected components
+    const blobs = cc(binClosed, w, h);
+
+    // Step E: Shape filter — no fixed size limit yet; reject only obviously
+    //   wrong shapes (divider bars, tile borders, stray noise)
     const shaped = blobs.filter(b => {
-      if (b.size < 6 || b.size > area*0.12) return false;
+      if (b.size < 5 || b.size > area * 0.10) return false;
       const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
-      if (Math.min(bw,bh)/Math.max(bw,bh) < 0.25) return false; // reject bars
-      if (b.size/(bw*bh) < 0.22) return false; // reject sparse shapes
+      // Reject elongated bars (dividers, tile edges)
+      if (Math.min(bw,bh) / Math.max(bw,bh) < 0.22) return false;
+      // Reject very sparse blobs (irregular table reflections etc.)
+      if (b.size / (bw*bh) < 0.18) return false;
       return true;
     });
 
-    // Adaptive size calibration: dots in a set are the same physical size,
-    // so they cluster tightly in log-space regardless of camera distance.
+    // Step F: Adaptive size calibration via log-histogram clustering.
+    //   All dots in a set are the same physical size → tight log-space cluster.
     const dots = filterByDominantSize(shaped);
+
     return { dots, half1:dots, half2:[], count1:dots.length, count2:0,
              total:dots.length, w, h, countAllMode:true };
   }
@@ -844,6 +868,12 @@ function analyzeCanvas(w,h) {
   // ════════════════════════════════════════════════════════════════════
   //  SPLIT MODE  — single tile, count each half
   // ════════════════════════════════════════════════════════════════════
+  let thresh = otsu(sig) + sensOffset;
+  thresh = Math.max(20, Math.min(240, thresh));
+  const bin = new Uint8Array(area);
+  for(let i=0;i<area;i++) bin[i] = sig[i]>=thresh ? 1 : 0;
+  const blobs = cc(bin,w,h);
+
   const dots = blobs.filter(b=>{
     if(b.size<area*0.0003||b.size>area*0.06) return false;
     const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
@@ -852,7 +882,6 @@ function analyzeCanvas(w,h) {
     return true;
   });
 
-  // Auto-detect orientation from the divider bar
   if(!orientManually){
     const db=new Uint8Array(area);
     for(let i=0;i<area;i++){const p=i<<2;db[i]=Math.min(px[p],px[p+1],px[p+2])<60?1:0;}
@@ -873,6 +902,122 @@ function analyzeCanvas(w,h) {
   const half1=dots.filter(d=>(orient==='h'?d.cy:d.cx)<mid);
   const half2=dots.filter(d=>(orient==='h'?d.cy:d.cx)>=mid);
   return {dots,half1,half2,count1:half1.length,count2:half2.length,total:dots.length,w,h,countAllMode:false};
+}
+
+/* ── Separable box blur ─────────────────────────────────────────────────
+   Two 1-D passes (horizontal then vertical). O(n·r) total.
+   Approximates a Gaussian well enough for noise reduction. */
+function boxBlur(src, w, h, r) {
+  const tmp = new Uint8Array(w*h);
+  // Horizontal
+  for(let y=0;y<h;y++){
+    let sum=0;
+    // Seed first window
+    for(let d=0;d<=r;d++) sum+=src[y*w+Math.min(d,w-1)];
+    for(let x=0;x<w;x++){
+      tmp[y*w+x] = (sum/(r*2+1)) | 0;
+      const xout=x-r, xin=x+r+1;
+      if(xout>=0)  sum-=src[y*w+xout];
+      if(xin<w)    sum+=src[y*w+xin];
+    }
+  }
+  // Vertical
+  const out = new Uint8Array(w*h);
+  for(let x=0;x<w;x++){
+    let sum=0;
+    for(let d=0;d<=r;d++) sum+=tmp[Math.min(d,h-1)*w+x];
+    for(let y=0;y<h;y++){
+      out[y*w+x] = (sum/(r*2+1)) | 0;
+      const yout=y-r, yin=y+r+1;
+      if(yout>=0) sum-=tmp[yout*w+x];
+      if(yin<h)   sum+=tmp[yin*w+x];
+    }
+  }
+  return out;
+}
+
+/* ── Adaptive threshold (Bradley & Roth method) ─────────────────────────
+   For each pixel, threshold = local_mean × (1 − k).
+   Uses an integral image so cost is O(n), regardless of window size.
+   k≈0.15 means a pixel must be 15% brighter than its neighbourhood mean
+   to be classified as foreground. */
+function adaptiveThreshold(src, w, h, winFrac, k) {
+  // Build integral image (1-indexed for clean boundary handling)
+  const W = w+1, H = h+1;
+  const ii = new Float64Array(W*H); // zero-initialised
+  for(let y=1;y<H;y++){
+    for(let x=1;x<W;x++){
+      ii[y*W+x] = src[(y-1)*w+(x-1)]
+        + ii[(y-1)*W+x]
+        + ii[y*W+(x-1)]
+        - ii[(y-1)*W+(x-1)];
+    }
+  }
+  const hw = Math.max(4, Math.floor(w*winFrac*0.5));
+  const hh = Math.max(4, Math.floor(h*winFrac*0.5));
+  const bin = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    const y1=Math.max(0,y-hh),   y2=Math.min(h-1,y+hh);
+    for(let x=0;x<w;x++){
+      const x1=Math.max(0,x-hw), x2=Math.min(w-1,x+hw);
+      const cnt=(x2-x1)*(y2-y1);
+      if(cnt===0){bin[y*w+x]=0;continue;}
+      const sum = ii[(y2+1)*W+(x2+1)]
+                - ii[(y1)*W+(x2+1)]
+                - ii[(y2+1)*W+x1]
+                + ii[y1*W+x1];
+      bin[y*w+x] = src[y*w+x] * cnt > sum * (1-k) ? 1 : 0;
+    }
+  }
+  return bin;
+}
+
+/* ── Morphological closing (dilate then erode), separable ───────────────
+   Closing = dilation followed by erosion with same structuring element.
+   Effect: fills holes and gaps ≤ r pixels wide — critical for dots that
+   appear as rings due to specular highlights on their rounded surfaces. */
+function morphClose(bin, w, h, r) {
+  return morphErode(morphDilate(bin, w, h, r), w, h, r);
+}
+function morphDilate(bin, w, h, r) {
+  // Horizontal
+  const tmp = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let v=0;
+      for(let d=-r;d<=r&&!v;d++){const nx=x+d;if(nx>=0&&nx<w&&bin[y*w+nx])v=1;}
+      tmp[y*w+x]=v;
+    }
+  }
+  // Vertical
+  const out = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let v=0;
+      for(let d=-r;d<=r&&!v;d++){const ny=y+d;if(ny>=0&&ny<h&&tmp[ny*w+x])v=1;}
+      out[y*w+x]=v;
+    }
+  }
+  return out;
+}
+function morphErode(bin, w, h, r) {
+  const tmp = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let v=1;
+      for(let d=-r;d<=r&&v;d++){const nx=x+d;if(nx<0||nx>=w||!bin[y*w+nx])v=0;}
+      tmp[y*w+x]=v;
+    }
+  }
+  const out = new Uint8Array(w*h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      let v=1;
+      for(let d=-r;d<=r&&v;d++){const ny=y+d;if(ny<0||ny>=h||!tmp[ny*w+x])v=0;}
+      out[y*w+x]=v;
+    }
+  }
+  return out;
 }
 
 /* Adaptive size calibration via log-histogram peak detection.
@@ -1326,6 +1471,7 @@ function confirmNewGame(){
 
 function newGame(){
   players=[];currentRound=1;maxRounds=13;gamePhase='setup';
+  document.getElementById('rounds-select').value='13';
   scoringMode=false;scoringPlayerIdx=-1;
   document.getElementById('round-chip').style.display='none';
   document.getElementById('gs-setup').style.display='block';
