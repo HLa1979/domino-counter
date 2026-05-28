@@ -300,8 +300,8 @@
 
   <!-- Orientation -->
   <div id="orient-row">
-    <button class="orient-btn active" id="ob-h" onclick="setOrient('h')">⬌ Horizontal split</button>
-    <button class="orient-btn"        id="ob-v" onclick="setOrient('v')">⬍ Vertical split</button>
+    <button class="orient-btn"        id="ob-h" onclick="setOrient('h')">⬌ Horizontal split</button>
+    <button class="orient-btn active" id="ob-v" onclick="setOrient('v')">⬍ Vertical split</button>
   </div>
 
   <!-- Sensitivity (hidden until first capture) -->
@@ -326,7 +326,8 @@
    STATE
 ===================================================================== */
 let stream = null;
-let orient = 'h';         // 'h' = horizontal split, 'v' = vertical
+let orient = 'v';              // 'h' = horizontal split, 'v' = vertical (default: vertical, most dominos are landscape)
+let orientManuallySet = false; // true once user taps an orientation button
 let runTotal = 0;
 let domCount = 0;
 let lastResult = null;    // most recent detection result
@@ -470,32 +471,46 @@ function analyzeCanvas(w, h) {
   const imgData = hctx.getImageData(0, 0, w, h);
   const pixels  = imgData.data;
 
-  // 1. Grayscale
-  const gray = new Uint8Array(w * h);
+  // 1. Estimate tile background color from the brightest 25% of pixels.
+  //    This works whether the tile is white, cream, or any light color,
+  //    and ignores a dark table/surface the domino is resting on.
+  const brightness = new Float32Array(w * h);
   for (let i = 0; i < w * h; i++) {
     const p = i << 2;
-    gray[i] = (pixels[p] * 299 + pixels[p+1] * 587 + pixels[p+2] * 114) / 1000;
+    brightness[i] = (pixels[p] + pixels[p+1] + pixels[p+2]) / 3;
+  }
+  const sorted = Float32Array.from(brightness).sort();
+  const cutoff = sorted[Math.floor(w * h * 0.75)]; // top 25% brightness
+  let rSum = 0, gSum = 0, bSum = 0, cnt = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (brightness[i] >= cutoff) {
+      const p = i << 2;
+      rSum += pixels[p]; gSum += pixels[p+1]; bSum += pixels[p+2];
+      cnt++;
+    }
+  }
+  const bgR = rSum / cnt, bgG = gSum / cnt, bgB = bSum / cnt;
+
+  // 2. "Non-background" signal: RGB distance from the tile color.
+  //    Yellow (255,255,0) vs white (255,255,255) → distance 255 — detected!
+  //    Gray  (128,128,128) vs white → distance 127 — detected!
+  //    Pure grayscale would miss yellow entirely.
+  const signal = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    const p = i << 2;
+    const dr = pixels[p]   - bgR;
+    const dg = pixels[p+1] - bgG;
+    const db = pixels[p+2] - bgB;
+    signal[i] = Math.min(255, Math.sqrt(dr*dr + dg*dg + db*db) | 0);
   }
 
-  // 2. Otsu threshold
-  let thresh = otsu(gray) + sensOffset;
-  thresh = Math.max(10, Math.min(245, thresh));
-
-  // 3. Binary: we look for DARK blobs on a light background.
-  //    If the image is inverted (dark domino, light dots), flip.
-  //    Check: are more pixels light (background) or dark?
-  let darkCount = 0;
-  for (let i = 0; i < gray.length; i++) if (gray[i] < thresh) darkCount++;
-  const darkFrac = darkCount / gray.length;
-
-  // Dominos are typically white background (dark < 40% of pixels)
-  // If most pixels are dark, invert the search (white dots on dark tile)
-  const invert = darkFrac > 0.6;
+  // 3. Otsu threshold on signal + user sensitivity offset
+  let thresh = otsu(signal) + sensOffset;
+  thresh = Math.max(20, Math.min(240, thresh));
 
   const binary = new Uint8Array(w * h);
   for (let i = 0; i < w * h; i++) {
-    binary[i] = invert ? (gray[i] >= thresh ? 1 : 0)
-                       : (gray[i] <  thresh ? 1 : 0);
+    binary[i] = signal[i] >= thresh ? 1 : 0;
   }
 
   // 4. Connected components (iterative DFS)
@@ -503,21 +518,45 @@ function analyzeCanvas(w, h) {
 
   // 5. Filter to dot candidates
   const area = w * h;
-  const minA = area * 0.0004;  // 0.04%
-  const maxA = area * 0.04;    // 4%
+  const minA = area * 0.0003;  // 0.03% — allows small dots on large tiles
+  const maxA = area * 0.06;    // 6%
 
   const dots = blobs.filter(b => {
     if (b.size < minA || b.size > maxA) return false;
     const bw = b.maxX - b.minX + 1;
     const bh = b.maxY - b.minY + 1;
     const aspect = Math.min(bw, bh) / Math.max(bw, bh);
-    if (aspect < 0.35) return false;
+    if (aspect < 0.3) return false;   // reject divider bar (very elongated)
     const fill = b.size / (bw * bh);
-    if (fill < 0.35) return false;
+    if (fill < 0.3) return false;
     return true;
   });
 
-  // 6. Split by orientation
+  // 6. Auto-detect split orientation from the divider bar (largest elongated dark blob)
+  //    unless the user has manually overridden it this session.
+  if (!orientManuallySet) {
+    const darkBin = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+      const p = i << 2;
+      darkBin[i] = Math.min(pixels[p], pixels[p+1], pixels[p+2]) < 60 ? 1 : 0;
+    }
+    const darkBlobs = connectedComponents(darkBin, w, h)
+      .filter(b => b.size > area * 0.002 && b.size < area * 0.15);
+    if (darkBlobs.length > 0) {
+      const bar = darkBlobs.reduce((a, b) => b.size > a.size ? b : a);
+      const bw = bar.maxX - bar.minX + 1;
+      const bh = bar.maxY - bar.minY + 1;
+      // Vertical bar (tall & thin) → split left|right
+      const detectedOrient = bh > bw * 1.5 ? 'v' : 'h';
+      if (detectedOrient !== orient) {
+        orient = detectedOrient;
+        document.getElementById('ob-h').classList.toggle('active', orient === 'h');
+        document.getElementById('ob-v').classList.toggle('active', orient === 'v');
+      }
+    }
+  }
+
+  // 7. Split by orientation
   const midH = h / 2, midW = w / 2;
   let half1, half2;
   if (orient === 'h') {
@@ -533,7 +572,8 @@ function analyzeCanvas(w, h) {
     count1: half1.length,
     count2: half2.length,
     total:  dots.length,
-    w, h, thresh, invert
+    w, h, thresh,
+    bgR, bgG, bgB
   };
 }
 
@@ -754,6 +794,7 @@ function resetTotal() {
 
 function setOrient(o) {
   orient = o;
+  orientManuallySet = true;
   document.getElementById('ob-h').classList.toggle('active', o === 'h');
   document.getElementById('ob-v').classList.toggle('active', o === 'v');
   // Re-split if we already have a result
