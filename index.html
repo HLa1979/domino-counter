@@ -3,12 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Domino Counter</title>
+  <title>Mexican Train Counter</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+    :root {
+      --red:   #e94560;
+      --green: #1db954;
+      --blue:  #3a7bd5;
+      --bg:    #0f0f1a;
+      --card:  #16213e;
+      --border:#1e3060;
+      --text2: #aaa;
+      --text3: #556;
+    }
+
     body {
-      background: #0f0f1a;
+      background: var(--bg);
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       height: 100dvh;
@@ -18,406 +29,735 @@
       user-select: none;
     }
 
-    /* ── Header ── */
+    /* ── Header + tabs ── */
     #header {
-      padding: 10px 16px 8px;
-      background: #16213e;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #header-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-shrink: 0;
-      border-bottom: 1px solid #1e3060;
+      padding: 10px 16px 6px;
     }
-    #header h1 { font-size: 18px; font-weight: 700; color: #e94560; }
-    #header .tips { font-size: 11px; color: #888; }
+    #header h1 { font-size: 17px; font-weight: 700; color: var(--red); }
+    #round-chip {
+      background: rgba(233,69,96,0.15);
+      border: 1px solid rgba(233,69,96,0.4);
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+      display: none;
+    }
+    #tabs { display: flex; }
+    .tab-btn {
+      flex: 1;
+      padding: 8px 4px;
+      border: none;
+      background: transparent;
+      color: var(--text3);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab-btn.active { color: var(--red); border-bottom-color: var(--red); }
 
-    /* ── Camera viewport ── */
+    /* ── Views ── */
+    #view-camera, #view-game {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #view-game { display: none; overflow-y: auto; }
+
+    /* ── Camera ── */
     #cam-wrap {
       flex: 1;
       position: relative;
       overflow: hidden;
       background: #000;
     }
-
     #video {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
       object-fit: cover;
     }
-
     #overlay-canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
       display: none;
     }
-
-    /* Guide frame shown while live */
     #guide {
       position: absolute;
-      top: 8%;
-      left: 6%;
-      right: 6%;
-      bottom: 8%;
-      border: 2px dashed rgba(255,255,255,0.35);
+      top:8%;left:6%;right:6%;bottom:8%;
+      border: 2px dashed rgba(255,255,255,0.3);
       border-radius: 14px;
       pointer-events: none;
     }
-
     #guide-label {
       position: absolute;
-      top: calc(8% - 20px);
-      left: 50%;
+      top: calc(8% - 20px); left: 50%;
       transform: translateX(-50%);
-      font-size: 11px;
-      color: rgba(255,255,255,0.5);
-      white-space: nowrap;
+      font-size: 11px; color: rgba(255,255,255,0.45);
+      white-space: nowrap; pointer-events: none;
     }
-
-    /* Processing spinner */
     #processing {
-      position: absolute;
-      inset: 0;
+      position: absolute; inset: 0;
       background: rgba(0,0,0,0.65);
       display: none;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      gap: 12px;
-      font-size: 15px;
-      color: #ccc;
+      align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px;
+      font-size: 15px; color: #ccc;
     }
     .spinner {
-      width: 36px; height: 36px;
+      width:36px; height:36px;
       border: 3px solid rgba(255,255,255,0.15);
-      border-top-color: #e94560;
+      border-top-color: var(--red);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* Scoring mode banner on camera */
+    #scoring-banner {
+      display: none;
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(58,123,213,0.92);
+      padding: 8px 14px;
+      z-index: 5;
+      pointer-events: none;
+    }
+    #scoring-banner .sb-label { font-size: 11px; color: rgba(255,255,255,0.7); }
+    #scoring-banner .sb-info  { font-size: 14px; font-weight: 700; }
+
     /* Start screen */
     #start-screen {
-      position: absolute;
-      inset: 0;
-      background: #0f0f1a;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 32px 24px;
-      text-align: center;
-      gap: 12px;
+      position: absolute; inset: 0;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 32px 24px; text-align: center; gap: 12px;
       z-index: 10;
     }
-    #start-screen .icon { font-size: 72px; }
-    #start-screen h2 { font-size: 26px; font-weight: 700; }
-    #start-screen p { font-size: 14px; color: #999; line-height: 1.65; max-width: 320px; }
+    #start-screen .icon { font-size: 60px; }
+    #start-screen h2 { font-size: 22px; font-weight: 700; }
+    #start-screen p { font-size: 14px; color: #999; line-height: 1.6; max-width: 300px; }
 
-    /* ── Controls bar ── */
+    /* ── Camera controls bar ── */
     #controls {
-      background: #16213e;
-      padding: 12px 14px;
+      background: var(--card);
+      padding: 10px 14px 12px;
       flex-shrink: 0;
-      border-top: 1px solid #1e3060;
+      border-top: 1px solid var(--border);
     }
-
-    /* Score display */
     #score-display {
       display: none;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 10px;
+      align-items: center; justify-content: center;
+      gap: 10px; margin-bottom: 10px;
     }
-
     .half-box {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 64px;
-      height: 64px;
-      border-radius: 14px;
-      font-size: 34px;
-      font-weight: 800;
-      line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      width:58px; height:58px; border-radius:12px;
+      font-size:28px; font-weight:800;
     }
-    .half-box.left  { background: #1a6644; border: 2px solid #00ff88; color: #00ff88; }
-    .half-box.right { background: #5c1630; border: 2px solid #ff5577; color: #ff9aae; }
+    .half-box.left  { background:#1a6644; border:2px solid #00ff88; color:#00ff88; }
+    .half-box.right { background:#5c1630; border:2px solid #ff5577; color:#ff9aae; }
+    .score-divider  { width:3px; height:48px; background:rgba(255,255,255,0.35); border-radius:2px; }
+    .score-meta { display:flex; flex-direction:column; gap:2px; }
+    .score-meta .lbl { font-size:11px; color:#666; }
+    .score-meta .val { font-size:22px; font-weight:800; }
 
-    .score-divider {
-      width: 4px;
-      height: 56px;
-      background: rgba(255,255,255,0.5);
-      border-radius: 2px;
-    }
-
-    .score-meta {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
-    }
-    .score-meta .tile-total { font-size: 13px; color: #aaa; }
-    .score-meta .tile-sum { font-size: 20px; font-weight: 700; color: #fff; }
-
-    /* Running total */
-    #total-bar {
-      display: none;
-      background: rgba(0,0,0,0.4);
-      border-radius: 10px;
-      padding: 6px 12px;
-      margin-bottom: 10px;
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-    }
-    #total-bar .tl { font-size: 12px; color: #888; }
-    #total-bar .tv { font-size: 22px; font-weight: 800; color: #1db954; }
-    #total-bar .tc { font-size: 11px; color: #666; }
-
-    /* Orientation toggle */
-    #orient-row {
-      display: none;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
+    #orient-row { display:none; gap:8px; margin-bottom:10px; }
     .orient-btn {
-      flex: 1;
-      padding: 7px 4px;
-      border: 2px solid #253a6e;
-      border-radius: 8px;
-      background: transparent;
-      color: #778;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
+      flex:1; padding:7px 4px;
+      border:2px solid #253a6e; border-radius:8px;
+      background:transparent; color:#778;
+      font-size:12px; font-weight:600; cursor:pointer;
       transition: all 0.15s;
     }
-    .orient-btn.active {
-      border-color: #e94560;
-      color: #fff;
-      background: rgba(233,69,96,0.18);
-    }
+    .orient-btn.active { border-color:var(--red); color:#fff; background:rgba(233,69,96,0.18); }
 
-    /* Buttons */
-    .btn-row { display: flex; gap: 8px; }
+    #sens-row { display:none; align-items:center; gap:8px; margin-bottom:8px; }
+    #sens-row label { font-size:11px; color:#666; white-space:nowrap; }
+    #sens-slider { flex:1; accent-color:var(--red); }
+
+    .btn-row { display:flex; gap:8px; }
     .btn {
-      flex: 1;
-      padding: 13px 8px;
-      border: none;
-      border-radius: 12px;
-      font-size: 15px;
-      font-weight: 700;
-      cursor: pointer;
+      flex:1; padding:13px 8px; border:none; border-radius:12px;
+      font-size:15px; font-weight:700; cursor:pointer;
       transition: opacity 0.15s, transform 0.1s;
     }
-    .btn:active { opacity: 0.75; transform: scale(0.97); }
+    .btn:active { opacity:0.75; transform:scale(0.97); }
+    .btn-capture { background:var(--red); color:#fff; }
+    .btn-retake  { background:#253a6e; color:#fff; }
+    .btn-add     { background:#1a6644; color:#00ff88; }
+    .btn-add-score { background:var(--blue); color:#fff; }
 
-    .btn-capture { background: #e94560; color: #fff; }
-    .btn-retake  { background: #253a6e; color: #fff; }
-    .btn-add     { background: #1a6644; color: #00ff88; }
-    .btn-reset   { background: #2a1a1a; color: #ff5577; font-size: 13px; padding: 8px; }
+    #status-line { text-align:center; font-size:11px; color:#556; margin-top:6px; }
 
-    #status-line {
+    /* flash */
+    #added-flash {
+      display:none; position:absolute;
+      top:50%; left:50%; transform:translate(-50%,-50%);
+      background:rgba(26,102,68,0.92); color:#00ff88;
+      font-size:16px; font-weight:700;
+      padding:12px 24px; border-radius:14px;
+      pointer-events:none; z-index:20; white-space:nowrap;
+    }
+
+    /* ════════════════════════════════
+       GAME VIEW
+    ════════════════════════════════ */
+    /* -- Setup screen -- */
+    #gs-setup {
+      padding: 20px 16px;
+    }
+    #gs-setup h2 { font-size:18px; font-weight:700; margin-bottom:4px; }
+    #gs-setup .sub { font-size:12px; color:var(--text2); margin-bottom:16px; }
+
+    .player-input-row {
+      display:flex; gap:8px; align-items:center; margin-bottom:8px;
+    }
+    .player-input-row input {
+      flex:1; padding:10px 12px;
+      background:#0f1929; border:1.5px solid var(--border);
+      border-radius:10px; color:#fff; font-size:15px;
+      outline:none; transition: border-color 0.15s;
+    }
+    .player-input-row input:focus { border-color:var(--blue); }
+    .player-input-row input::placeholder { color:#334; }
+    .del-player-btn {
+      background:none; border:none; color:#334;
+      font-size:18px; cursor:pointer; padding:4px 8px;
+    }
+    .del-player-btn:active { color:var(--red); }
+
+    #add-player-btn {
+      width:100%; padding:10px;
+      background:transparent; border:1.5px dashed var(--border);
+      border-radius:10px; color:var(--text3);
+      font-size:14px; cursor:pointer; margin-bottom:16px;
+      transition: all 0.15s;
+    }
+    #add-player-btn:active { border-color:var(--blue); color:var(--blue); }
+
+    .setup-row { display:flex; gap:8px; align-items:center; margin-bottom:16px; }
+    .setup-row label { font-size:13px; color:var(--text2); flex:1; }
+    .setup-row select {
+      padding:8px 12px; background:#0f1929;
+      border:1.5px solid var(--border); border-radius:10px;
+      color:#fff; font-size:14px; outline:none;
+    }
+
+    .btn-start {
+      width:100%; padding:14px;
+      background:var(--red); color:#fff;
+      border:none; border-radius:12px;
+      font-size:16px; font-weight:700; cursor:pointer;
+    }
+    .btn-start:active { opacity:0.8; }
+    .https-warn { font-size:11px; color:var(--red); margin-top:8px; display:none; text-align:center; }
+
+    /* -- Scoreboard screen -- */
+    #gs-board {
+      display: none;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    #board-top {
+      padding: 12px 16px 10px;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #board-round-info {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px;
+    }
+    #board-round-info .rnum { font-size:22px; font-weight:900; color:var(--red); }
+    #board-round-info .rtotal { font-size:13px; color:var(--text2); }
+    #board-subtitle { font-size:11px; color:var(--text3); }
+
+    /* Scrollable table */
+    #table-wrap {
+      flex: 1;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      position: sticky; top: 0;
+      background: #0f1929;
+      padding: 8px 10px;
       text-align: center;
       font-size: 11px;
-      color: #666;
-      margin-top: 6px;
+      font-weight: 700;
+      color: var(--text3);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    thead th:first-child { text-align: left; min-width: 90px; }
+    tbody tr { border-bottom: 1px solid rgba(30,48,96,0.5); }
+    tbody tr.winner-row td { color: var(--green); }
+    tbody td {
+      padding: 10px 10px;
+      text-align: center;
+      color: #ccc;
+    }
+    tbody td:first-child {
+      text-align: left;
+      font-weight: 600;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .crown { font-size: 13px; }
+    td.total-col {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+    }
+    td.current-round-col { color: var(--text3); font-style: italic; }
+    td.score-cell { color: #aaa; }
+    td.score-zero { color: var(--green); font-weight: 700; }
+
+    /* Board actions */
+    #board-actions {
+      padding: 12px 16px;
+      background: var(--card);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .btn-score-round {
+      width: 100%; padding: 14px;
+      background: var(--red); color: #fff;
+      border: none; border-radius: 12px;
+      font-size: 16px; font-weight: 700; cursor: pointer;
+    }
+    .btn-score-round:active { opacity: 0.8; }
+    .btn-score-round:disabled { background:#2a1a1a; color:#445; cursor:default; }
+
+    .board-btn-row { display: flex; gap: 8px; }
+    .btn-sm {
+      flex:1; padding:9px 8px; border:none; border-radius:10px;
+      font-size:13px; font-weight:700; cursor:pointer; transition:opacity 0.15s;
+    }
+    .btn-sm:active { opacity:0.75; }
+    .btn-new-game { background:#1a0f0f; color:#ff5577; }
+    .btn-end-game { background:#0f1a2a; color:#60aaff; }
+
+    /* -- Scoring panel (overlay) -- */
+    #gs-scoring {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      background: var(--bg);
+      flex-direction: column;
+    }
+    #scoring-header {
+      background: var(--card);
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #scoring-header h2 { font-size:16px; font-weight:700; margin-bottom:2px; }
+    #scoring-header .sub { font-size:12px; color:var(--text2); }
+
+    #scoring-body {
+      flex:1; overflow-y:auto;
+      padding: 20px 16px;
     }
 
-    /* Sensitivity hint */
-    #sens-row {
-      display: none;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 8px;
+    /* Player scoring card */
+    .scoring-card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 16px;
+      border: 1.5px solid var(--border);
+      transition: border-color 0.2s;
     }
-    #sens-row label { font-size: 11px; color: #666; white-space: nowrap; }
-    #sens-slider { flex: 1; accent-color: #e94560; }
+    .scoring-card.active { border-color: var(--blue); }
+    .scoring-card.done   { border-color: #1a5c3a; opacity:0.85; }
+
+    .scoring-card-top {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .sc-name { font-size:16px; font-weight:700; }
+    .sc-badge-done {
+      background:#1a5c3a; color:#00ff88;
+      font-size:11px; font-weight:700;
+      padding:3px 10px; border-radius:20px; display:none;
+    }
+    .sc-badge-active {
+      background:rgba(58,123,213,0.2); color:#60aaff;
+      border:1px solid rgba(58,123,213,0.4);
+      font-size:11px; font-weight:700;
+      padding:3px 10px; border-radius:20px; display:none;
+    }
+
+    /* Dot count controls */
+    .dot-controls {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .count-btn {
+      width:44px; height:44px;
+      background:#0f1929; border:1.5px solid var(--border);
+      border-radius:10px; color:#fff;
+      font-size:22px; font-weight:700; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition: all 0.1s;
+    }
+    .count-btn:active { background:var(--border); transform:scale(0.92); }
+    .dot-count-display {
+      flex:1; text-align:center;
+      font-size:36px; font-weight:900;
+      background:#0f1929; border:1.5px solid var(--border);
+      border-radius:10px; padding:8px;
+      cursor:text;
+    }
+    .dot-count-display:focus {
+      outline:none; border-color:var(--blue);
+    }
+
+    .scan-btn {
+      margin-top:10px; width:100%; padding:10px;
+      background:rgba(58,123,213,0.15);
+      border:1.5px solid rgba(58,123,213,0.4);
+      border-radius:10px; color:#60aaff;
+      font-size:13px; font-weight:700; cursor:pointer;
+      transition: all 0.15s;
+    }
+    .scan-btn:active { background:rgba(58,123,213,0.3); }
+
+    #scoring-footer {
+      background: var(--card);
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .btn-confirm-round {
+      width:100%; padding:14px;
+      background:var(--green); color:#000;
+      border:none; border-radius:12px;
+      font-size:16px; font-weight:800; cursor:pointer;
+    }
+    .btn-confirm-round:active { opacity:0.8; }
+    .btn-cancel-scoring {
+      width:100%; padding:9px;
+      background:transparent; border:none;
+      color:var(--text3); font-size:13px; cursor:pointer;
+      margin-top:6px;
+    }
+
+    /* -- Game over screen -- */
+    #gs-gameover {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 20px;
+      text-align: center;
+      overflow-y: auto;
+    }
+    #gs-gameover .trophy { font-size:64px; margin-bottom:12px; }
+    #gs-gameover h2 { font-size:24px; font-weight:900; margin-bottom:4px; }
+    #gs-gameover .winner-name { font-size:28px; font-weight:900; color:var(--green); margin-bottom:20px; }
+    .final-table { width:100%; background:var(--card); border-radius:14px; overflow:hidden; margin-bottom:20px; }
+    .final-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 16px; border-bottom:1px solid var(--border);
+    }
+    .final-row:last-child { border:none; }
+    .final-row .pos { font-size:13px; color:var(--text3); width:24px; }
+    .final-row .pname { font-size:15px; font-weight:700; flex:1; text-align:left; padding-left:8px; }
+    .final-row .ptotal { font-size:18px; font-weight:800; }
+    .final-row.first .pname, .final-row.first .ptotal { color:var(--green); }
+
+    .btn-new-game-big {
+      width:100%; max-width:300px; padding:14px;
+      background:var(--red); color:#fff;
+      border:none; border-radius:14px;
+      font-size:16px; font-weight:700; cursor:pointer;
+    }
   </style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- ── Header ── -->
 <div id="header">
-  <h1>🎲 Domino Counter</h1>
-  <span class="tips">v1.0</span>
+  <div id="header-top">
+    <h1>🚂 Mexican Train</h1>
+    <div id="round-chip">Round <span id="round-chip-num">1</span></div>
+  </div>
+  <div id="tabs">
+    <button class="tab-btn active" id="tab-camera" onclick="showTab('camera')">📷 Camera</button>
+    <button class="tab-btn"       id="tab-game"   onclick="showTab('game')">📊 Scoreboard</button>
+  </div>
 </div>
 
-<!-- Camera area -->
-<div id="cam-wrap">
+<!-- ══════════════════════════════════════════
+     CAMERA VIEW
+══════════════════════════════════════════ -->
+<div id="view-camera">
 
-  <div id="start-screen">
-    <div class="icon">🁣</div>
-    <h2>Domino Counter</h2>
-    <p>Point your phone camera at one or more domino tiles. The app detects and counts the dots on each half automatically.</p>
-    <button class="btn btn-capture" style="max-width:240px;margin-top:8px" onclick="startCamera()">📷 Start Camera</button>
-    <p style="font-size:12px;color:#555;margin-top:8px">Works best in good lighting with high-contrast dominos</p>
-    <p id="https-warning" style="font-size:11px;color:#e94560;margin-top:4px;display:none">⚠️ Must be opened over HTTPS for camera access</p>
-  </div>
-
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="hidden-canvas" style="display:none"></canvas>
-  <canvas id="overlay-canvas"></canvas>
-
-  <div id="guide"></div>
-  <div id="guide-label">Place domino inside frame</div>
-
-  <div id="processing">
-    <div class="spinner"></div>
-    Counting dots…
-  </div>
-
-</div>
-
-<!-- Controls -->
-<div id="controls">
-
-  <!-- Running total -->
-  <div id="total-bar">
-    <div>
-      <div class="tl">Running total</div>
-      <div class="tv" id="tv">0</div>
+  <div id="cam-wrap">
+    <div id="start-screen">
+      <div class="icon">🁣</div>
+      <h2>Domino Counter</h2>
+      <p>Point your camera at a domino tile to count its dots. Use the Scoreboard tab to track your game.</p>
+      <button class="btn btn-capture" style="max-width:220px;margin-top:8px;flex:none" onclick="startCamera()">📷 Start Camera</button>
+      <p style="font-size:12px;color:#555;margin-top:4px">Works best in good lighting</p>
+      <p id="https-warning" style="font-size:11px;color:var(--red);margin-top:4px;display:none">⚠️ Requires HTTPS for camera access</p>
     </div>
-    <div class="tc" id="tc">0 dominos</div>
-    <button class="btn btn-reset" onclick="resetTotal()">Reset</button>
-  </div>
 
-  <!-- Score -->
-  <div id="score-display">
-    <div class="half-box left" id="score-l">–</div>
-    <div class="score-divider"></div>
-    <div class="half-box right" id="score-r">–</div>
-    <div class="score-meta">
-      <div class="tile-total">Tile total</div>
-      <div class="tile-sum" id="tile-sum">–</div>
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="hidden-canvas" style="display:none"></canvas>
+    <canvas id="overlay-canvas"></canvas>
+
+    <div id="guide"></div>
+    <div id="guide-label">Place domino inside frame</div>
+
+    <!-- Count-all result overlay -->
+    <div id="countall-result" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+         background:rgba(0,0,0,0.82);border-radius:20px;padding:12px 28px;text-align:center;pointer-events:none;white-space:nowrap;">
+      <div style="font-size:11px;color:#aaa;margin-bottom:2px">Total dots detected</div>
+      <div id="countall-num" style="font-size:52px;font-weight:900;color:#00ff88;line-height:1"></div>
+    </div>
+
+    <div id="added-flash">✓ Added</div>
+
+    <div id="scoring-banner">
+      <div class="sb-label">Scoring Round <span id="sb-round"></span> — <span id="sb-player"></span></div>
+      <div class="sb-info">Tiles scanned: <span id="sb-count">0</span> dots so far</div>
+    </div>
+
+    <div id="processing">
+      <div class="spinner"></div>
+      Counting dots…
     </div>
   </div>
 
-  <!-- Orientation -->
-  <div id="orient-row">
-    <button class="orient-btn"        id="ob-h" onclick="setOrient('h')">⬌ Horizontal split</button>
-    <button class="orient-btn active" id="ob-v" onclick="setOrient('v')">⬍ Vertical split</button>
+  <!-- Camera controls -->
+  <div id="controls">
+    <div id="score-display">
+      <div class="half-box left"  id="score-l">–</div>
+      <div class="score-divider"></div>
+      <div class="half-box right" id="score-r">–</div>
+      <div class="score-meta">
+        <div class="lbl">Tile total</div>
+        <div class="val" id="tile-sum">–</div>
+      </div>
+    </div>
+
+    <div id="orient-row">
+      <button class="orient-btn"        id="ob-h" onclick="setOrient('h')">⬌ Horizontal split</button>
+      <button class="orient-btn active" id="ob-v" onclick="setOrient('v')">⬍ Vertical split</button>
+    </div>
+
+    <div id="sens-row">
+      <label>Sensitivity</label>
+      <input type="range" id="sens-slider" min="-40" max="40" value="0" step="5" oninput="onSensChange()">
+      <label id="sens-val">0</label>
+    </div>
+
+    <div id="main-btns" class="btn-row" style="display:none">
+      <button class="btn btn-capture" id="btn-count"  onclick="captureAndCount()">📸 Count Dots</button>
+      <button class="btn btn-retake"  id="btn-retake" style="display:none" onclick="retake()">🔄 Retake</button>
+      <button class="btn btn-add"     id="btn-add-free" style="display:none" onclick="addFree()">＋ Add</button>
+      <button class="btn btn-add-score" id="btn-add-score" style="display:none" onclick="addToScore()">＋ Add to Score</button>
+    </div>
+
+    <div id="status-line">Tap Count to analyze the domino</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════
+     GAME VIEW
+══════════════════════════════════════════ -->
+<div id="view-game">
+
+  <!-- SETUP -->
+  <div id="gs-setup">
+    <h2>New Game Setup</h2>
+    <p class="sub">Mexican Train Dominoes</p>
+
+    <div id="player-inputs"></div>
+    <button id="add-player-btn" onclick="addPlayerInput()">＋ Add Player</button>
+
+    <div class="setup-row">
+      <label>Number of rounds</label>
+      <select id="rounds-select">
+        <option value="7">7 (Double-6 set)</option>
+        <option value="10">10 (Double-9 set)</option>
+        <option value="13" selected>13 (Double-12 set)</option>
+        <option value="0">Unlimited</option>
+      </select>
+    </div>
+
+    <button class="btn-start" onclick="startGame()">🚂 Start Game</button>
+    <p class="https-warn" id="https-warning2">⚠️ Camera requires HTTPS</p>
   </div>
 
-  <!-- Sensitivity (hidden until first capture) -->
-  <div id="sens-row">
-    <label>Sensitivity</label>
-    <input type="range" id="sens-slider" min="-40" max="40" value="0" step="5" oninput="onSensChange()">
-    <label id="sens-val">0</label>
+  <!-- SCOREBOARD -->
+  <div id="gs-board">
+    <div id="board-top">
+      <div id="board-round-info">
+        <span class="rnum">Round <span id="br-num">1</span></span>
+        <span class="rtotal" id="br-of"></span>
+      </div>
+      <div id="board-subtitle">Tap "Score Round" when everyone is done playing</div>
+    </div>
+
+    <div id="table-wrap">
+      <table>
+        <thead id="table-head"></thead>
+        <tbody id="table-body"></tbody>
+      </table>
+    </div>
+
+    <div id="board-actions">
+      <button class="btn-score-round" id="btn-score-round" onclick="openScoring()">
+        📝 Score Round <span id="bsr-num">1</span>
+      </button>
+      <div class="board-btn-row">
+        <button class="btn-sm btn-end-game" onclick="endGame()">🏁 End Game</button>
+        <button class="btn-sm btn-new-game" onclick="confirmNewGame()">🗑 New Game</button>
+      </div>
+    </div>
   </div>
 
-  <!-- Action buttons -->
-  <div id="main-btns" class="btn-row" style="display:none">
-    <button class="btn btn-capture" id="btn-count" onclick="captureAndCount()">📸 Count Dots</button>
-    <button class="btn btn-retake"  id="btn-retake" style="display:none" onclick="retake()">🔄 Retake</button>
-    <button class="btn btn-add"     id="btn-add"    style="display:none" onclick="addToTotal()">＋ Add</button>
+  <!-- GAME OVER -->
+  <div id="gs-gameover">
+    <div class="trophy">🏆</div>
+    <h2>Game Over!</h2>
+    <div class="winner-name" id="go-winner"></div>
+    <div class="final-table" id="go-table"></div>
+    <button class="btn-new-game-big" onclick="confirmNewGame()">🚂 New Game</button>
   </div>
 
-  <div id="status-line">Tap Count to analyze the domino</div>
+</div>
+
+<!-- SCORING OVERLAY -->
+<div id="gs-scoring">
+  <div id="scoring-header">
+    <h2>Score Round <span id="sc-round-num"></span></h2>
+    <div class="sub">Enter each player's remaining tile dots</div>
+  </div>
+  <div id="scoring-body"></div>
+  <div id="scoring-footer">
+    <button class="btn-confirm-round" onclick="confirmRound()">✓ Confirm Round Scores</button>
+    <button class="btn-cancel-scoring" onclick="cancelScoring()">Cancel</button>
+  </div>
 </div>
 
 <script>
 /* =====================================================================
    STATE
 ===================================================================== */
-let stream = null;
-let orient = 'v';              // 'h' = horizontal split, 'v' = vertical (default: vertical, most dominos are landscape)
-let orientManuallySet = false; // true once user taps an orientation button
-let runTotal = 0;
-let domCount = 0;
-let lastResult = null;    // most recent detection result
-let sensOffset = 0;       // user threshold offset (-40..40)
+let stream         = null;
+let orient         = 'v';
+let orientManually = false;
+let lastResult     = null;
+let sensOffset     = 0;
+let scanMode       = 'split'; // 'split' | 'countAll'
 
-// Show HTTPS warning if on http or file://
+// Game state
+let players      = [];   // [{name, scores:[...], total}]
+let currentRound = 1;
+let maxRounds    = 13;
+let gamePhase    = 'setup'; // 'setup'|'playing'|'gameover'
+
+// Scoring state
+let scoringMode      = false;
+let scoringPlayerIdx = -1;  // which player we're scanning for
+let roundDotCounts   = [];  // dot counts for current round being scored [per player]
+
+// HTTPS check
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-  document.getElementById('https-warning').style.display = 'block';
+  const w1 = document.getElementById('https-warning');
+  const w2 = document.getElementById('https-warning2');
+  if (w1) w1.style.display = 'block';
+  if (w2) w2.style.display = 'block';
 }
 
-const video  = document.getElementById('video');
-const hcanvas = document.getElementById('hidden-canvas');    // off-screen processing
-const hctx   = hcanvas.getContext('2d', { willReadFrequently: true });
-const ocanvas = document.getElementById('overlay-canvas');   // on-screen result
-const octx   = ocanvas.getContext('2d');
+const video   = document.getElementById('video');
+const hcanvas = document.getElementById('hidden-canvas');
+const hctx    = hcanvas.getContext('2d', { willReadFrequently: true });
+const ocanvas = document.getElementById('overlay-canvas');
+const octx    = ocanvas.getContext('2d');
+
+/* =====================================================================
+   TABS
+===================================================================== */
+function showTab(tab) {
+  document.getElementById('view-camera').style.display = tab === 'camera' ? 'flex' : 'none';
+  document.getElementById('view-game').style.display   = tab === 'game'   ? 'flex' : 'none';
+  document.getElementById('tab-camera').classList.toggle('active', tab === 'camera');
+  document.getElementById('tab-game').classList.toggle('active',   tab === 'game');
+  if (tab === 'game') refreshGameView();
+}
 
 /* =====================================================================
    CAMERA
 ===================================================================== */
 async function startCamera() {
-  // Check API availability first
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    showCameraError('Your browser does not support camera access.\n\nTry opening this page in Chrome or Safari over HTTPS.');
-    return;
+    alert('Camera not supported. Try Chrome or Safari over HTTPS.'); return;
   }
-
   document.getElementById('start-screen').style.display = 'none';
-  document.getElementById('main-btns').style.display = 'flex';
-  document.getElementById('orient-row').style.display = 'flex';
+  document.getElementById('main-btns').style.display    = 'flex';
+  document.getElementById('orient-row').style.display   = 'flex';
   setStatus('Requesting camera permission…');
 
-  // Try progressively simpler constraints until one works
   const attempts = [
-    { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
-    { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
-    { facingMode: { ideal: 'environment' } },
-    true  // any camera at all
+    { facingMode:{exact:'environment'}, width:{ideal:1280}, height:{ideal:960} },
+    { facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} },
+    { facingMode:{ideal:'environment'} },
+    true
   ];
-
   let lastErr = null;
-  for (const constraint of attempts) {
+  for (const c of attempts) {
     try {
-      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-      stream = await navigator.mediaDevices.getUserMedia({ video: constraint, audio: false });
+      if (stream) { stream.getTracks().forEach(t=>t.stop()); stream=null; }
+      stream = await navigator.mediaDevices.getUserMedia({ video:c, audio:false });
       video.srcObject = stream;
-      // Safari needs the play() promise handled carefully
-      await new Promise((resolve, reject) => {
-        video.onloadedmetadata = () => {
-          video.play().then(resolve).catch(reject);
-        };
-        video.onerror = reject;
-        // Fallback if metadata never fires
-        setTimeout(resolve, 3000);
+      await new Promise((res,rej) => {
+        video.onloadedmetadata = () => video.play().then(res).catch(rej);
+        video.onerror = rej;
+        setTimeout(res, 3000);
       });
       setStatus('Position domino in frame, then tap Count');
-      return; // success
-    } catch (err) {
-      lastErr = err;
-    }
+      return;
+    } catch(e) { lastErr=e; }
   }
-
-  // All attempts failed
-  showCameraError(cameraErrorMessage(lastErr));
-}
-
-function showCameraError(msg) {
   document.getElementById('start-screen').style.display = 'flex';
   document.getElementById('main-btns').style.display = 'none';
-  document.getElementById('orient-row').style.display = 'none';
-  setStatus('Camera unavailable');
-  alert(msg);
+  alert(cameraErrMsg(lastErr));
 }
 
-function cameraErrorMessage(err) {
+function cameraErrMsg(err) {
   if (!err) return 'Unknown camera error.';
-  if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-    return 'Camera permission denied.\n\nGo to your browser settings and allow camera access for this page, then reload.';
-  }
-  if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-    return 'No camera found on this device.';
-  }
-  if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-    return 'Camera is in use by another app.\n\nClose other apps that may be using the camera, then try again.';
-  }
-  if (err.name === 'OverconstrainedError') {
-    return 'Camera constraints could not be satisfied. Try a different browser.';
-  }
-  if (err.name === 'SecurityError') {
-    return 'Camera blocked for security reasons.\n\nThis app must be served over HTTPS (not http:// or file://).';
-  }
+  if (err.name==='NotAllowedError')  return 'Camera permission denied. Allow it in settings, then reload.';
+  if (err.name==='NotFoundError')    return 'No camera found.';
+  if (err.name==='NotReadableError') return 'Camera in use by another app.';
+  if (err.name==='SecurityError')    return 'Camera blocked — must use HTTPS.';
   return 'Camera error: ' + err.message;
 }
 
@@ -425,419 +765,594 @@ function cameraErrorMessage(err) {
    CAPTURE + PROCESS
 ===================================================================== */
 async function captureAndCount() {
-  if (!stream || !video.videoWidth) {
-    setStatus('Camera not ready — tap Start Camera first');
-    return;
-  }
-
+  if (!stream || !video.videoWidth) { setStatus('Camera not ready'); return; }
   showProcessing(true);
   await tick(30);
-
   try {
-    // ── Capture frame ──────────────────────────────────────────
-    const VW = video.videoWidth, VH = video.videoHeight;
-
-    // Downscale to max 640 wide for fast processing
-    const scale = Math.min(1, 640 / VW);
-    const pw = Math.round(VW * scale);
-    const ph = Math.round(VH * scale);
-
-    hcanvas.width  = pw;
-    hcanvas.height = ph;
-    hctx.drawImage(video, 0, 0, pw, ph);
-
-    const result = analyzeCanvas(pw, ph);
-    result.scale = scale;
-    result.pw = pw;
-    result.ph = ph;
-    lastResult = result;
-
-    renderOverlay(result);
-    showScore(result);
-    document.getElementById('sens-row').style.display = 'flex';
-
-  } catch (err) {
-    setStatus('Error: ' + err.message);
-    console.error(err);
-  } finally {
-    showProcessing(false);
-  }
+    // CountAll mode uses higher resolution to detect dots across many tiles
+    const maxW = scanMode === 'countAll' ? 1280 : 640;
+    const scale = Math.min(1, maxW/video.videoWidth);
+    const pw = Math.round(video.videoWidth*scale);
+    const ph = Math.round(video.videoHeight*scale);
+    hcanvas.width=pw; hcanvas.height=ph;
+    hctx.drawImage(video,0,0,pw,ph);
+    lastResult = analyzeCanvas(pw,ph);
+    renderOverlay(lastResult);
+    showScore(lastResult);
+    document.getElementById('sens-row').style.display='flex';
+  } catch(e) { setStatus('Error: '+e.message); console.error(e); }
+  finally { showProcessing(false); }
 }
 
 /* =====================================================================
    IMAGE PROCESSING
 ===================================================================== */
-function analyzeCanvas(w, h) {
-  const imgData = hctx.getImageData(0, 0, w, h);
-  const pixels  = imgData.data;
+function analyzeCanvas(w,h) {
+  const imgData = hctx.getImageData(0,0,w,h);
+  const px = imgData.data;
+  const area = w*h;
 
-  // 1. Estimate tile background color from the brightest 25% of pixels.
-  //    This works whether the tile is white, cream, or any light color,
-  //    and ignores a dark table/surface the domino is resting on.
-  const brightness = new Float32Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    const p = i << 2;
-    brightness[i] = (pixels[p] + pixels[p+1] + pixels[p+2]) / 3;
+  // ── 1. Background = avg of brightest 25% pixels (tile surface) ───────
+  const bri = new Float32Array(area);
+  for(let i=0;i<area;i++){const p=i<<2;bri[i]=(px[p]+px[p+1]+px[p+2])/3;}
+  const sortedBri = Float32Array.from(bri).sort();
+  const cutoff = sortedBri[Math.floor(area*0.75)];
+  let rS=0,gS=0,bS=0,cnt=0;
+  for(let i=0;i<area;i++){
+    if(bri[i]>=cutoff){const p=i<<2;rS+=px[p];gS+=px[p+1];bS+=px[p+2];cnt++;}
   }
-  const sorted = Float32Array.from(brightness).sort();
-  const cutoff = sorted[Math.floor(w * h * 0.75)]; // top 25% brightness
-  let rSum = 0, gSum = 0, bSum = 0, cnt = 0;
-  for (let i = 0; i < w * h; i++) {
-    if (brightness[i] >= cutoff) {
-      const p = i << 2;
-      rSum += pixels[p]; gSum += pixels[p+1]; bSum += pixels[p+2];
-      cnt++;
-    }
-  }
-  const bgR = rSum / cnt, bgG = gSum / cnt, bgB = bSum / cnt;
+  const bgR=rS/cnt, bgG=gS/cnt, bgB=bS/cnt;
 
-  // 2. "Non-background" signal: RGB distance from the tile color.
-  //    Yellow (255,255,0) vs white (255,255,255) → distance 255 — detected!
-  //    Gray  (128,128,128) vs white → distance 127 — detected!
-  //    Pure grayscale would miss yellow entirely.
-  const signal = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    const p = i << 2;
-    const dr = pixels[p]   - bgR;
-    const dg = pixels[p+1] - bgG;
-    const db = pixels[p+2] - bgB;
-    signal[i] = Math.min(255, Math.sqrt(dr*dr + dg*dg + db*db) | 0);
+  // ── 2. Signal = RGB distance from tile background ─────────────────────
+  // Yellow (255,255,0) vs white (255,255,255) → distance 255.
+  // Pure grayscale would treat yellow as near-white and miss it.
+  const sig = new Uint8Array(area);
+  for(let i=0;i<area;i++){
+    const p=i<<2, dr=px[p]-bgR, dg=px[p+1]-bgG, db=px[p+2]-bgB;
+    sig[i]=Math.min(255, Math.sqrt(dr*dr+dg*dg+db*db)|0);
   }
 
-  // 3. Otsu threshold on signal + user sensitivity offset
-  let thresh = otsu(signal) + sensOffset;
+  // ── 3. Threshold ──────────────────────────────────────────────────────
+  let thresh = otsu(sig) + sensOffset;
   thresh = Math.max(20, Math.min(240, thresh));
+  const bin = new Uint8Array(area);
+  for(let i=0;i<area;i++) bin[i] = sig[i]>=thresh ? 1 : 0;
 
-  const binary = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) {
-    binary[i] = signal[i] >= thresh ? 1 : 0;
+  // ── 4. Connected components ───────────────────────────────────────────
+  const blobs = cc(bin,w,h);
+
+  // ════════════════════════════════════════════════════════════════════
+  //  COUNT-ALL MODE  — photograph all remaining tiles at once
+  // ════════════════════════════════════════════════════════════════════
+  if (scanMode === 'countAll') {
+    // Shape-only pre-filter (no fixed size range — tiles may be at any distance)
+    const shaped = blobs.filter(b => {
+      if (b.size < 6 || b.size > area*0.12) return false;
+      const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
+      if (Math.min(bw,bh)/Math.max(bw,bh) < 0.25) return false; // reject bars
+      if (b.size/(bw*bh) < 0.22) return false; // reject sparse shapes
+      return true;
+    });
+
+    // Adaptive size calibration: dots in a set are the same physical size,
+    // so they cluster tightly in log-space regardless of camera distance.
+    const dots = filterByDominantSize(shaped);
+    return { dots, half1:dots, half2:[], count1:dots.length, count2:0,
+             total:dots.length, w, h, countAllMode:true };
   }
 
-  // 4. Connected components (iterative DFS)
-  const blobs = connectedComponents(binary, w, h);
-
-  // 5. Filter to dot candidates
-  const area = w * h;
-  const minA = area * 0.0003;  // 0.03% — allows small dots on large tiles
-  const maxA = area * 0.06;    // 6%
-
-  const dots = blobs.filter(b => {
-    if (b.size < minA || b.size > maxA) return false;
-    const bw = b.maxX - b.minX + 1;
-    const bh = b.maxY - b.minY + 1;
-    const aspect = Math.min(bw, bh) / Math.max(bw, bh);
-    if (aspect < 0.3) return false;   // reject divider bar (very elongated)
-    const fill = b.size / (bw * bh);
-    if (fill < 0.3) return false;
+  // ════════════════════════════════════════════════════════════════════
+  //  SPLIT MODE  — single tile, count each half
+  // ════════════════════════════════════════════════════════════════════
+  const dots = blobs.filter(b=>{
+    if(b.size<area*0.0003||b.size>area*0.06) return false;
+    const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
+    if(Math.min(bw,bh)/Math.max(bw,bh)<0.3) return false;
+    if(b.size/(bw*bh)<0.3) return false;
     return true;
   });
 
-  // 6. Auto-detect split orientation from the divider bar (largest elongated dark blob)
-  //    unless the user has manually overridden it this session.
-  if (!orientManuallySet) {
-    const darkBin = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-      const p = i << 2;
-      darkBin[i] = Math.min(pixels[p], pixels[p+1], pixels[p+2]) < 60 ? 1 : 0;
-    }
-    const darkBlobs = connectedComponents(darkBin, w, h)
-      .filter(b => b.size > area * 0.002 && b.size < area * 0.15);
-    if (darkBlobs.length > 0) {
-      const bar = darkBlobs.reduce((a, b) => b.size > a.size ? b : a);
-      const bw = bar.maxX - bar.minX + 1;
-      const bh = bar.maxY - bar.minY + 1;
-      // Vertical bar (tall & thin) → split left|right
-      const detectedOrient = bh > bw * 1.5 ? 'v' : 'h';
-      if (detectedOrient !== orient) {
-        orient = detectedOrient;
-        document.getElementById('ob-h').classList.toggle('active', orient === 'h');
-        document.getElementById('ob-v').classList.toggle('active', orient === 'v');
+  // Auto-detect orientation from the divider bar
+  if(!orientManually){
+    const db=new Uint8Array(area);
+    for(let i=0;i<area;i++){const p=i<<2;db[i]=Math.min(px[p],px[p+1],px[p+2])<60?1:0;}
+    const dk=cc(db,w,h).filter(b=>b.size>area*0.002&&b.size<area*0.15);
+    if(dk.length>0){
+      const bar=dk.reduce((a,b)=>b.size>a.size?b:a);
+      const bw=bar.maxX-bar.minX+1, bh=bar.maxY-bar.minY+1;
+      const det=bh>bw*1.5?'v':'h';
+      if(det!==orient){
+        orient=det;
+        document.getElementById('ob-h').classList.toggle('active',orient==='h');
+        document.getElementById('ob-v').classList.toggle('active',orient==='v');
       }
     }
   }
 
-  // 7. Split by orientation
-  const midH = h / 2, midW = w / 2;
-  let half1, half2;
-  if (orient === 'h') {
-    half1 = dots.filter(d => d.cy < midH);
-    half2 = dots.filter(d => d.cy >= midH);
-  } else {
-    half1 = dots.filter(d => d.cx < midW);
-    half2 = dots.filter(d => d.cx >= midW);
-  }
-
-  return {
-    dots, half1, half2,
-    count1: half1.length,
-    count2: half2.length,
-    total:  dots.length,
-    w, h, thresh,
-    bgR, bgG, bgB
-  };
+  const mid=orient==='h'?h/2:w/2;
+  const half1=dots.filter(d=>(orient==='h'?d.cy:d.cx)<mid);
+  const half2=dots.filter(d=>(orient==='h'?d.cy:d.cx)>=mid);
+  return {dots,half1,half2,count1:half1.length,count2:half2.length,total:dots.length,w,h,countAllMode:false};
 }
 
-/* Otsu's optimal global threshold */
-function otsu(gray) {
-  const hist = new Float64Array(256);
-  const n = gray.length;
-  for (let i = 0; i < n; i++) hist[gray[i]]++;
-  for (let i = 0; i < 256; i++) hist[i] /= n;
+/* Adaptive size calibration via log-histogram peak detection.
+   Dots in a domino set are all the same physical size, so their pixel
+   areas cluster tightly in log-space even across different camera distances.
+   We find the peak cluster and keep only blobs within ±1.5 octaves of it. */
+function filterByDominantSize(blobs) {
+  if (blobs.length < 2) return blobs;
+  const BINS = 28;
+  const logSizes = blobs.map(b => Math.log2(b.size));
+  const minL = Math.min(...logSizes), maxL = Math.max(...logSizes);
+  if (maxL - minL < 0.8) return blobs; // already tight — keep all
 
-  let sum = 0;
-  for (let i = 0; i < 256; i++) sum += i * hist[i];
-
-  let sumB = 0, wB = 0, best = 0, thresh = 128;
-  for (let t = 0; t < 256; t++) {
-    wB += hist[t];
-    if (wB < 1e-10) continue;
-    const wF = 1 - wB;
-    if (wF < 1e-10) break;
-    sumB += t * hist[t];
-    const mB = sumB / wB;
-    const mF = (sum - sumB) / wF;
-    const between = wB * wF * (mB - mF) * (mB - mF);
-    if (between > best) { best = between; thresh = t; }
-  }
-  return thresh;
+  const hist = new Array(BINS).fill(0);
+  logSizes.forEach(ls => {
+    const bin = Math.min(BINS-1, Math.floor((ls-minL)/(maxL-minL)*BINS));
+    hist[bin]++;
+  });
+  // Smooth to find true peak (3-bin moving average)
+  const smooth = hist.map((v,i) => (hist[i-1]||0)*0.25 + v*0.5 + (hist[i+1]||0)*0.25);
+  const peakBin  = smooth.indexOf(Math.max(...smooth));
+  const peakLog  = minL + (peakBin + 0.5) / BINS * (maxL - minL);
+  const minSize  = Math.pow(2, peakLog - 1.5);
+  const maxSize  = Math.pow(2, peakLog + 1.5);
+  return blobs.filter(b => b.size >= minSize && b.size <= maxSize);
 }
 
-/* Iterative connected components — returns array of blob descriptors */
-function connectedComponents(binary, w, h) {
-  const labels = new Int32Array(w * h).fill(-1);
-  const blobs  = [];
+function otsu(data){
+  const h=new Float64Array(256),n=data.length;
+  for(let i=0;i<n;i++)h[data[i]]++;
+  for(let i=0;i<256;i++)h[i]/=n;
+  let sum=0;for(let i=0;i<256;i++)sum+=i*h[i];
+  let sB=0,wB=0,best=0,t=128;
+  for(let i=0;i<256;i++){
+    wB+=h[i];if(wB<1e-10||1-wB<1e-10)continue;
+    sB+=i*h[i];const mB=sB/wB,mF=(sum-sB)/(1-wB),bw=wB*(1-wB)*(mB-mF)*(mB-mF);
+    if(bw>best){best=bw;t=i;}
+  }
+  return t;
+}
 
-  for (let sy = 0; sy < h; sy++) {
-    for (let sx = 0; sx < w; sx++) {
-      const si = sy * w + sx;
-      if (binary[si] !== 1 || labels[si] !== -1) continue;
-
-      const id = blobs.length;
-      const blob = { size: 0, sumX: 0, sumY: 0, cx: 0, cy: 0,
-                     minX: sx, maxX: sx, minY: sy, maxY: sy };
-      const stack = [si];
-      labels[si] = id;
-
-      while (stack.length > 0) {
-        const idx = stack.pop();
-        const x = idx % w;
-        const y = (idx / w) | 0;
-
-        blob.size++;
-        blob.sumX += x; blob.sumY += y;
-        if (x < blob.minX) blob.minX = x;
-        if (x > blob.maxX) blob.maxX = x;
-        if (y < blob.minY) blob.minY = y;
-        if (y > blob.maxY) blob.maxY = y;
-
-        // 4-connected neighbors
-        if (x > 0)     pushIfUnlabeled(idx - 1);
-        if (x < w - 1) pushIfUnlabeled(idx + 1);
-        if (y > 0)     pushIfUnlabeled(idx - w);
-        if (y < h - 1) pushIfUnlabeled(idx + w);
-
-        function pushIfUnlabeled(n) {
-          if (binary[n] === 1 && labels[n] === -1) {
-            labels[n] = id;
-            stack.push(n);
-          }
-        }
-      }
-
-      blob.cx = blob.sumX / blob.size;
-      blob.cy = blob.sumY / blob.size;
-      blobs.push(blob);
+function cc(bin,w,h){
+  const lab=new Int32Array(w*h).fill(-1),blobs=[];
+  for(let sy=0;sy<h;sy++)for(let sx=0;sx<w;sx++){
+    const si=sy*w+sx;if(bin[si]!==1||lab[si]!==-1)continue;
+    const id=blobs.length;
+    const b={size:0,sumX:0,sumY:0,cx:0,cy:0,minX:sx,maxX:sx,minY:sy,maxY:sy};
+    const st=[si];lab[si]=id;
+    while(st.length>0){
+      const idx=st.pop(),x=idx%w,y=idx/w|0;
+      b.size++;b.sumX+=x;b.sumY+=y;
+      if(x<b.minX)b.minX=x;if(x>b.maxX)b.maxX=x;
+      if(y<b.minY)b.minY=y;if(y>b.maxY)b.maxY=y;
+      const push=n=>{if(n>=0&&n<w*h&&bin[n]===1&&lab[n]===-1){lab[n]=id;st.push(n);}};
+      if(x>0)push(idx-1);if(x<w-1)push(idx+1);
+      if(y>0)push(idx-w);if(y<h-1)push(idx+w);
     }
+    b.cx=b.sumX/b.size;b.cy=b.sumY/b.size;blobs.push(b);
   }
   return blobs;
 }
 
 /* =====================================================================
-   OVERLAY RENDERING
+   OVERLAY
 ===================================================================== */
-function renderOverlay(result) {
-  const dw = video.offsetWidth  || ocanvas.width;
-  const dh = video.offsetHeight || ocanvas.height;
-
-  ocanvas.width  = dw;
-  ocanvas.height = dh;
-
-  // Scale from processing coords → display coords
-  const sx = dw / result.w;
-  const sy = dh / result.h;
-
-  // Draw captured frame underneath
-  octx.drawImage(hcanvas, 0, 0, dw, dh);
-
-  // Dim overlay
-  octx.fillStyle = 'rgba(0,0,0,0.38)';
-  octx.fillRect(0, 0, dw, dh);
-
-  // Dividing line
-  octx.save();
-  octx.setLineDash([12, 6]);
-  octx.strokeStyle = 'rgba(255,255,255,0.6)';
-  octx.lineWidth = 2;
-  octx.beginPath();
-  if (orient === 'h') {
-    octx.moveTo(0, dh / 2);
-    octx.lineTo(dw, dh / 2);
+function renderOverlay(result){
+  const dw=video.offsetWidth,dh=video.offsetHeight;
+  ocanvas.width=dw;ocanvas.height=dh;
+  const sx=dw/result.w,sy=dh/result.h;
+  octx.drawImage(hcanvas,0,0,dw,dh);
+  octx.fillStyle='rgba(0,0,0,0.33)';octx.fillRect(0,0,dw,dh);
+  const dot=(d,col)=>{
+    const cx=d.cx*sx,cy=d.cy*sy,rx=((d.maxX-d.minX)/2+3)*sx,ry=((d.maxY-d.minY)/2+3)*sy;
+    octx.beginPath();octx.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);
+    octx.strokeStyle=col;octx.lineWidth=2.5;octx.stroke();
+    octx.fillStyle=col+'38';octx.fill();
+  };
+  result.half1.forEach(d=>dot(d,'#00ff88'));
+  result.half2.forEach(d=>dot(d,'#ff5577'));
+  octx.font='bold 36px -apple-system,sans-serif';
+  octx.textAlign='center';octx.textBaseline='middle';
+  const lbl=(t,x,y,c)=>{
+    octx.fillStyle='rgba(0,0,0,0.65)';
+    rr(octx,x-26,y-24,52,48,10);octx.fill();
+    octx.fillStyle=c;octx.fillText(t,x,y);
+  };
+  if (result.countAllMode) {
+    // CountAll: show floating total overlay instead of split labels
+    document.getElementById('countall-num').textContent = result.total;
+    document.getElementById('countall-result').style.display = 'block';
   } else {
-    octx.moveTo(dw / 2, 0);
-    octx.lineTo(dw / 2, dh);
+    document.getElementById('countall-result').style.display = 'none';
+    if(orient==='h'){lbl(result.count1,dw/2,dh*.25,'#00ff88');lbl(result.count2,dw/2,dh*.75,'#ff9aae');}
+    else{lbl(result.count1,dw*.25,dh/2,'#00ff88');lbl(result.count2,dw*.75,dh/2,'#ff9aae');}
   }
-  octx.stroke();
-  octx.restore();
-
-  // Draw dot circles
-  function drawDot(d, color) {
-    const cx = d.cx * sx;
-    const cy = d.cy * sy;
-    const rx = ((d.maxX - d.minX) / 2 + 3) * sx;
-    const ry = ((d.maxY - d.minY) / 2 + 3) * sy;
-    octx.beginPath();
-    octx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
-    octx.strokeStyle = color;
-    octx.lineWidth = 2.5;
-    octx.stroke();
-    octx.fillStyle = color + '40';
-    octx.fill();
-  }
-  result.half1.forEach(d => drawDot(d, '#00ff88'));
-  result.half2.forEach(d => drawDot(d, '#ff5577'));
-
-  // Score labels per half
-  octx.font = 'bold 40px -apple-system, sans-serif';
-  octx.textAlign = 'center';
-  octx.textBaseline = 'middle';
-
-  function drawLabel(text, x, y, color) {
-    octx.fillStyle = 'rgba(0,0,0,0.65)';
-    roundRect(octx, x - 30, y - 28, 60, 56, 12);
-    octx.fill();
-    octx.fillStyle = color;
-    octx.fillText(text, x, y);
-  }
-
-  if (orient === 'h') {
-    drawLabel(result.count1, dw / 2, dh * 0.25, '#00ff88');
-    drawLabel(result.count2, dw / 2, dh * 0.75, '#ff9aae');
-  } else {
-    drawLabel(result.count1, dw * 0.25, dh / 2, '#00ff88');
-    drawLabel(result.count2, dw * 0.75, dh / 2, '#ff9aae');
-  }
-
-  ocanvas.style.display = 'block';
-  video.style.opacity = '0';
-  document.getElementById('guide').style.display = 'none';
-  document.getElementById('guide-label').style.display = 'none';
+  ocanvas.style.display='block';video.style.opacity='0';
+  document.getElementById('guide').style.display='none';
+  document.getElementById('guide-label').style.display='none';
 }
-
-function roundRect(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y,     x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x,     y + h, r);
-  ctx.arcTo(x,     y + h, x,     y,     r);
-  ctx.arcTo(x,     y,     x + w, y,     r);
-  ctx.closePath();
+function rr(ctx,x,y,w,h,r){
+  ctx.beginPath();ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
 }
 
 /* =====================================================================
-   UI CONTROLS
+   CAMERA UI
 ===================================================================== */
-function showScore(result) {
-  document.getElementById('score-l').textContent = result.count1;
-  document.getElementById('score-r').textContent = result.count2;
-  document.getElementById('tile-sum').textContent = result.total;
-  document.getElementById('score-display').style.display = 'flex';
-
-  document.getElementById('btn-count').style.display  = 'none';
-  document.getElementById('btn-retake').style.display = 'inline-flex';
-  document.getElementById('btn-add').style.display    = 'inline-flex';
-
-  setStatus(`Detected ${result.total} dot${result.total !== 1 ? 's' : ''} — ${result.count1} | ${result.count2}`);
-}
-
-function retake() {
-  ocanvas.style.display = 'none';
-  video.style.opacity   = '1';
-  document.getElementById('guide').style.display      = 'block';
-  document.getElementById('guide-label').style.display = 'block';
-  document.getElementById('score-display').style.display = 'none';
-  document.getElementById('btn-count').style.display  = 'inline-flex';
-  document.getElementById('btn-retake').style.display = 'none';
-  document.getElementById('btn-add').style.display    = 'none';
-  document.getElementById('sens-row').style.display   = 'none';
-  lastResult = null;
-  setStatus('Position domino in frame, then tap Count');
-}
-
-function addToTotal() {
-  if (!lastResult) return;
-  runTotal += lastResult.total;
-  domCount++;
-
-  const bar = document.getElementById('total-bar');
-  bar.style.display = 'flex';
-  document.getElementById('tv').textContent = runTotal;
-  document.getElementById('tc').textContent = domCount + ' domino' + (domCount !== 1 ? 's' : '');
-
-  retake();
-}
-
-function resetTotal() {
-  runTotal = 0;
-  domCount = 0;
-  document.getElementById('total-bar').style.display = 'none';
-}
-
-function setOrient(o) {
-  orient = o;
-  orientManuallySet = true;
-  document.getElementById('ob-h').classList.toggle('active', o === 'h');
-  document.getElementById('ob-v').classList.toggle('active', o === 'v');
-  // Re-split if we already have a result
-  if (lastResult) {
-    const r = lastResult;
-    const midH = r.h / 2, midW = r.w / 2;
-    if (orient === 'h') {
-      r.half1 = r.dots.filter(d => d.cy < midH);
-      r.half2 = r.dots.filter(d => d.cy >= midH);
-    } else {
-      r.half1 = r.dots.filter(d => d.cx < midW);
-      r.half2 = r.dots.filter(d => d.cx >= midW);
-    }
-    r.count1 = r.half1.length;
-    r.count2 = r.half2.length;
-    renderOverlay(r);
-    showScore(r);
+function showScore(result){
+  if (result.countAllMode) {
+    // CountAll mode: hide split display, just show total in the overlay
+    document.getElementById('score-display').style.display='none';
+    setStatus(`${result.total} dot${result.total!==1?'s':''} detected across all tiles`);
+  } else {
+    document.getElementById('score-l').textContent=result.count1;
+    document.getElementById('score-r').textContent=result.count2;
+    document.getElementById('tile-sum').textContent=result.total;
+    document.getElementById('score-display').style.display='flex';
+    setStatus(`${result.count1} | ${result.count2}  —  ${result.total} dot${result.total!==1?'s':''}`);
+  }
+  document.getElementById('btn-count').style.display='none';
+  document.getElementById('btn-retake').style.display='inline-flex';
+  if(scoringMode){
+    document.getElementById('btn-add-score').textContent = result.countAllMode
+      ? `✓ Use ${result.total} as my score`
+      : `＋ Add ${result.total} to score`;
+    document.getElementById('btn-add-score').style.display='inline-flex';
+    document.getElementById('btn-add-free').style.display='none';
+  } else {
+    document.getElementById('btn-add-free').style.display='inline-flex';
+    document.getElementById('btn-add-score').style.display='none';
   }
 }
 
-function onSensChange() {
-  const s = document.getElementById('sens-slider');
-  sensOffset = parseInt(s.value);
-  document.getElementById('sens-val').textContent = (sensOffset >= 0 ? '+' : '') + sensOffset;
-  if (lastResult) captureAndCount(); // re-analyze live
+function retake(){
+  ocanvas.style.display='none'; video.style.opacity='1';
+  document.getElementById('guide').style.display='block';
+  document.getElementById('guide-label').style.display='block';
+  document.getElementById('countall-result').style.display='none';
+  document.getElementById('score-display').style.display='none';
+  document.getElementById('btn-count').style.display='inline-flex';
+  document.getElementById('btn-retake').style.display='none';
+  document.getElementById('btn-add-free').style.display='none';
+  document.getElementById('btn-add-score').style.display='none';
+  document.getElementById('sens-row').style.display='none';
+  lastResult=null;
+  if (scanMode==='countAll') {
+    document.getElementById('guide-label').textContent='Lay ALL remaining tiles flat in frame';
+    setStatus('Photograph all your remaining tiles at once, then tap Count');
+  } else {
+    document.getElementById('guide-label').textContent='Place domino inside frame';
+    setStatus('Position domino in frame, then tap Count');
+  }
 }
 
-function showProcessing(on) {
-  document.getElementById('processing').style.display = on ? 'flex' : 'none';
+function addFree(){
+  // Free-add: just show a flash (no game tracking)
+  const f=document.getElementById('added-flash');
+  f.textContent='✓ '+lastResult.total+' dots';
+  f.style.display='block';
+  setTimeout(()=>{f.style.display='none';},1000);
+  retake();
 }
 
-function setStatus(msg) {
-  document.getElementById('status-line').textContent = msg;
+function addToScore(){
+  if(!lastResult||!scoringMode) return;
+  if (scanMode==='countAll') {
+    // One photo = final count for this player; SET rather than accumulate
+    roundDotCounts[scoringPlayerIdx] = lastResult.total;
+  } else {
+    roundDotCounts[scoringPlayerIdx]=(roundDotCounts[scoringPlayerIdx]||0)+lastResult.total;
+  }
+  const el=document.getElementById('sc-count-'+scoringPlayerIdx);
+  if(el) el.textContent=roundDotCounts[scoringPlayerIdx];
+  document.getElementById('sb-count').textContent=roundDotCounts[scoringPlayerIdx];
+
+  // In countAll mode, go straight back to scoring panel
+  if (scanMode==='countAll') {
+    returnToScoring();
+  } else {
+    const f=document.getElementById('added-flash');
+    f.textContent='＋'+lastResult.total+' dots';
+    f.style.display='block';
+    setTimeout(()=>{f.style.display='none';},900);
+    retake();
+  }
 }
 
-function tick(ms) {
-  return new Promise(r => setTimeout(r, ms));
+function setOrient(o){
+  orient=o;orientManually=true;
+  document.getElementById('ob-h').classList.toggle('active',o==='h');
+  document.getElementById('ob-v').classList.toggle('active',o==='v');
+  if(lastResult){
+    const r=lastResult,mid=o==='h'?r.h/2:r.w/2;
+    r.half1=r.dots.filter(d=>(o==='h'?d.cy:d.cx)<mid);
+    r.half2=r.dots.filter(d=>(o==='h'?d.cy:d.cx)>=mid);
+    r.count1=r.half1.length;r.count2=r.half2.length;
+    renderOverlay(r);showScore(r);
+  }
+}
+function onSensChange(){
+  sensOffset=parseInt(document.getElementById('sens-slider').value);
+  document.getElementById('sens-val').textContent=(sensOffset>=0?'+':'')+sensOffset;
+  if(lastResult)captureAndCount();
 }
 
-/* Handle window resize — redraw overlay */
-window.addEventListener('resize', () => {
-  if (lastResult) renderOverlay(lastResult);
+/* =====================================================================
+   GAME SETUP
+===================================================================== */
+function addPlayerInput(name=''){
+  const row=document.createElement('div');
+  row.className='player-input-row';
+  row.innerHTML=`<input type="text" placeholder="Player name" value="${name}" maxlength="20">
+    <button class="del-player-btn" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('player-inputs').appendChild(row);
+  row.querySelector('input').focus();
+}
+
+// Default 4 player slots
+['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
+
+function startGame(){
+  const inputs=[...document.querySelectorAll('#player-inputs input')];
+  const names=inputs.map(i=>i.value.trim()).filter(Boolean);
+  if(names.length<2){alert('Add at least 2 players.');return;}
+
+  players=names.map(n=>({name:n,scores:[],total:0}));
+  currentRound=1;
+  maxRounds=parseInt(document.getElementById('rounds-select').value)||999;
+
+  gamePhase='playing';
+  document.getElementById('round-chip').style.display='block';
+  document.getElementById('gs-setup').style.display='none';
+  document.getElementById('gs-board').style.display='flex';
+  document.getElementById('gs-gameover').style.display='none';
+  refreshGameView();
+}
+
+/* =====================================================================
+   GAME — SCOREBOARD
+===================================================================== */
+function refreshGameView(){
+  if(gamePhase==='setup')return;
+  if(gamePhase==='gameover'){
+    document.getElementById('gs-setup').style.display='none';
+    document.getElementById('gs-board').style.display='none';
+    document.getElementById('gs-gameover').style.display='flex';
+    renderGameOver();return;
+  }
+
+  document.getElementById('gs-setup').style.display='none';
+  document.getElementById('gs-board').style.display='flex';
+  document.getElementById('gs-gameover').style.display='none';
+
+  const rnum=Math.min(currentRound,maxRounds||999);
+  document.getElementById('round-chip-num').textContent=rnum;
+  document.getElementById('br-num').textContent=rnum;
+  document.getElementById('bsr-num').textContent=rnum;
+  document.getElementById('br-of').textContent=maxRounds?`of ${maxRounds} rounds`:'';
+  document.getElementById('board-subtitle').textContent=
+    `Tap "Score Round" when everyone is done playing round ${rnum}`;
+
+  // Build table header
+  const thead=document.getElementById('table-head');
+  let headHTML='<tr><th>Player</th>';
+  for(let r=1;r<=currentRound;r++) headHTML+=`<th>R${r}</th>`;
+  headHTML+='<th style="color:#fff">Total</th></tr>';
+  thead.innerHTML=headHTML;
+
+  // Build table body
+  const sorted=[...players].sort((a,b)=>a.total-b.total);
+  const minTotal=sorted[0]?.total??0;
+  const tbody=document.getElementById('table-body');
+  tbody.innerHTML='';
+  players.forEach(p=>{
+    const isLeading=p.total===minTotal&&currentRound>1&&p.scores.length>0;
+    const tr=document.createElement('tr');
+    if(isLeading) tr.className='winner-row';
+    let cells=`<td>${isLeading?'<span class="crown">👑</span>':''} ${p.name}</td>`;
+    for(let r=0;r<currentRound-1;r++){
+      const s=p.scores[r];
+      cells+=`<td class="score-cell${s===0?' score-zero':''}">${s!=null?s:'–'}</td>`;
+    }
+    // Current round column (pending)
+    if(p.scores.length<currentRound) cells+=`<td class="current-round-col">–</td>`;
+    cells+=`<td class="total-col">${p.total}</td>`;
+    tr.innerHTML=cells;
+    tbody.appendChild(tr);
+  });
+}
+
+/* =====================================================================
+   SCORING OVERLAY
+===================================================================== */
+function openScoring(){
+  roundDotCounts=players.map(()=>0);
+  scoringMode=false; scoringPlayerIdx=-1;
+
+  document.getElementById('sc-round-num').textContent=currentRound;
+
+  const body=document.getElementById('scoring-body');
+  body.innerHTML='';
+  players.forEach((p,i)=>{
+    const card=document.createElement('div');
+    card.className='scoring-card';
+    card.id='sc-card-'+i;
+    card.innerHTML=`
+      <div class="scoring-card-top">
+        <div class="sc-name">${p.name}</div>
+        <div class="sc-badge-done" id="sc-done-${i}">✓ Done</div>
+      </div>
+      <div class="dot-controls">
+        <button class="count-btn" onclick="adjustCount(${i},-1)">−</button>
+        <div class="dot-count-display" id="sc-count-${i}" contenteditable="true"
+             inputmode="numeric" onblur="parseCountInput(${i},this)"
+             oninput="limitInput(this)">0</div>
+        <button class="count-btn" onclick="adjustCount(${i},+1)">+</button>
+      </div>
+      <button class="scan-btn" onclick="startScanFor(${i})">📷 Scan remaining tiles for ${p.name}</button>
+    `;
+    body.appendChild(card);
+  });
+
+  document.getElementById('gs-scoring').style.display='flex';
+}
+
+function adjustCount(idx,delta){
+  roundDotCounts[idx]=Math.max(0,(roundDotCounts[idx]||0)+delta);
+  document.getElementById('sc-count-'+idx).textContent=roundDotCounts[idx];
+}
+
+function limitInput(el){
+  el.textContent=el.textContent.replace(/\D/g,'').slice(0,4);
+  // Move cursor to end
+  const range=document.createRange(),sel=window.getSelection();
+  range.selectNodeContents(el);range.collapse(false);
+  sel.removeAllRanges();sel.addRange(range);
+}
+
+function parseCountInput(idx,el){
+  const v=parseInt(el.textContent)||0;
+  roundDotCounts[idx]=Math.max(0,v);
+  el.textContent=roundDotCounts[idx];
+}
+
+function startScanFor(idx){
+  scoringMode    = true;
+  scanMode       = 'countAll';
+  scoringPlayerIdx = idx;
+  roundDotCounts[idx] = 0;
+  document.getElementById('sc-count-'+idx).textContent = 0;
+
+  document.getElementById('gs-scoring').style.display = 'none';
+
+  // Set up banner
+  document.getElementById('sb-round').textContent  = currentRound;
+  document.getElementById('sb-player').textContent = players[idx].name;
+  document.getElementById('sb-count').textContent  = 0;
+  document.getElementById('scoring-banner').style.display = 'block';
+
+  // Update camera guide
+  document.getElementById('guide-label').textContent = 'Lay ALL of ' + players[idx].name + '\'s tiles flat in frame';
+
+  showTab('camera');
+  if(!stream) startCamera();
+
+  document.getElementById('orient-row').style.display = 'none'; // not needed in countAll
+  setStatus('Lay all tiles flat → tap Count → tap "Use as my score"');
+}
+
+function returnToScoring(){
+  scoringMode = false;
+  scanMode    = 'split';
+  document.getElementById('scoring-banner').style.display = 'none';
+  document.getElementById('countall-result').style.display = 'none';
+  document.getElementById('orient-row').style.display = 'flex';
+  document.getElementById('guide-label').textContent = 'Place domino inside frame';
+  document.getElementById('gs-scoring').style.display = 'flex';
+  if(scoringPlayerIdx>=0){
+    document.getElementById('sc-count-'+scoringPlayerIdx).textContent = roundDotCounts[scoringPlayerIdx];
+  }
+  scoringPlayerIdx = -1;
+  retake();
+}
+
+function confirmRound(){
+  // Parse any manually edited counts
+  players.forEach((_,i)=>{
+    const el=document.getElementById('sc-count-'+i);
+    if(el) roundDotCounts[i]=Math.max(0,parseInt(el.textContent)||0);
+  });
+
+  // Record scores
+  players.forEach((p,i)=>{
+    p.scores[currentRound-1]=roundDotCounts[i];
+    p.total+=roundDotCounts[i];
+  });
+
+  document.getElementById('gs-scoring').style.display='none';
+  scoringMode=false;
+  scoringPlayerIdx=-1;
+
+  // Advance round or end game
+  if(maxRounds&&currentRound>=maxRounds){
+    gamePhase='gameover';
+  } else {
+    currentRound++;
+  }
+
+  showTab('game');
+  refreshGameView();
+}
+
+function cancelScoring(){
+  scoringMode=false; scanMode='split'; scoringPlayerIdx=-1;
+  document.getElementById('gs-scoring').style.display='none';
+  document.getElementById('scoring-banner').style.display='none';
+  document.getElementById('countall-result').style.display='none';
+  document.getElementById('orient-row').style.display='flex';
+  document.getElementById('guide-label').textContent='Place domino inside frame';
+  retake();
+}
+
+/* =====================================================================
+   GAME OVER
+===================================================================== */
+function endGame(){
+  if(!confirm('End the game now and show final standings?'))return;
+  gamePhase='gameover';
+  refreshGameView();
+  showTab('game');
+}
+
+function renderGameOver(){
+  const sorted=[...players].sort((a,b)=>a.total-b.total);
+  document.getElementById('go-winner').textContent='🥇 '+sorted[0].name;
+  document.getElementById('round-chip').style.display='none';
+  const table=document.getElementById('go-table');
+  table.innerHTML=sorted.map((p,i)=>`
+    <div class="final-row${i===0?' first':''}">
+      <div class="pos">${['🥇','🥈','🥉'][i]||i+1}</div>
+      <div class="pname">${p.name}</div>
+      <div class="ptotal">${p.total} pts</div>
+    </div>`).join('');
+}
+
+function confirmNewGame(){
+  if(!confirm('Start a new game? All scores will be cleared.'))return;
+  newGame();
+}
+
+function newGame(){
+  players=[];currentRound=1;maxRounds=13;gamePhase='setup';
+  scoringMode=false;scoringPlayerIdx=-1;
+  document.getElementById('round-chip').style.display='none';
+  document.getElementById('gs-setup').style.display='block';
+  document.getElementById('gs-board').style.display='none';
+  document.getElementById('gs-gameover').style.display='none';
+  document.getElementById('player-inputs').innerHTML='';
+  ['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
+  showTab('game');
+}
+
+/* =====================================================================
+   HELPERS
+===================================================================== */
+function showProcessing(on){ document.getElementById('processing').style.display=on?'flex':'none'; }
+function setStatus(msg){ document.getElementById('status-line').textContent=msg; }
+function tick(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+// Return to scoring when switching to game tab while in scoring mode
+const origShowTab=showTab;
+window._showTab=showTab;
+
+// Intercept scoreboard tab tap while scanning for a player
+document.getElementById('tab-game').addEventListener('click',()=>{
+  if(scoringMode&&scoringPlayerIdx>=0){ returnToScoring(); }
 });
+
+window.addEventListener('resize',()=>{ if(lastResult)renderOverlay(lastResult); });
 </script>
 </body>
 </html>
