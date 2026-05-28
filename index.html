@@ -256,6 +256,7 @@
     <p>Point your phone camera at one or more domino tiles. The app detects and counts the dots on each half automatically.</p>
     <button class="btn btn-capture" style="max-width:240px;margin-top:8px" onclick="startCamera()">📷 Start Camera</button>
     <p style="font-size:12px;color:#555;margin-top:8px">Works best in good lighting with high-contrast dominos</p>
+    <p id="https-warning" style="font-size:11px;color:#e94560;margin-top:4px;display:none">⚠️ Must be opened over HTTPS for camera access</p>
   </div>
 
   <video id="video" autoplay playsinline muted></video>
@@ -330,6 +331,11 @@ let domCount = 0;
 let lastResult = null;    // most recent detection result
 let sensOffset = 0;       // user threshold offset (-40..40)
 
+// Show HTTPS warning if on http or file://
+if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+  document.getElementById('https-warning').style.display = 'block';
+}
+
 const video  = document.getElementById('video');
 const hcanvas = document.getElementById('hidden-canvas');    // off-screen processing
 const hctx   = hcanvas.getContext('2d', { willReadFrequently: true });
@@ -340,36 +346,87 @@ const octx   = ocanvas.getContext('2d');
    CAMERA
 ===================================================================== */
 async function startCamera() {
+  // Check API availability first
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showCameraError('Your browser does not support camera access.\n\nTry opening this page in Chrome or Safari over HTTPS.');
+    return;
+  }
+
   document.getElementById('start-screen').style.display = 'none';
   document.getElementById('main-btns').style.display = 'flex';
   document.getElementById('orient-row').style.display = 'flex';
-  setStatus('Starting camera…');
+  setStatus('Requesting camera permission…');
 
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width:  { ideal: 1280 },
-        height: { ideal: 960 }
-      },
-      audio: false
-    });
-    video.srcObject = stream;
-    await video.play();
-    setStatus('Position domino in frame, then tap Count');
-  } catch (err) {
-    document.getElementById('start-screen').style.display = 'flex';
-    document.getElementById('main-btns').style.display = 'none';
-    setStatus('Camera error: ' + err.message);
-    alert('Could not access camera.\n\nMake sure camera permissions are allowed for this page.');
+  // Try progressively simpler constraints until one works
+  const attempts = [
+    { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+    { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+    { facingMode: { ideal: 'environment' } },
+    true  // any camera at all
+  ];
+
+  let lastErr = null;
+  for (const constraint of attempts) {
+    try {
+      if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+      stream = await navigator.mediaDevices.getUserMedia({ video: constraint, audio: false });
+      video.srcObject = stream;
+      // Safari needs the play() promise handled carefully
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = () => {
+          video.play().then(resolve).catch(reject);
+        };
+        video.onerror = reject;
+        // Fallback if metadata never fires
+        setTimeout(resolve, 3000);
+      });
+      setStatus('Position domino in frame, then tap Count');
+      return; // success
+    } catch (err) {
+      lastErr = err;
+    }
   }
+
+  // All attempts failed
+  showCameraError(cameraErrorMessage(lastErr));
+}
+
+function showCameraError(msg) {
+  document.getElementById('start-screen').style.display = 'flex';
+  document.getElementById('main-btns').style.display = 'none';
+  document.getElementById('orient-row').style.display = 'none';
+  setStatus('Camera unavailable');
+  alert(msg);
+}
+
+function cameraErrorMessage(err) {
+  if (!err) return 'Unknown camera error.';
+  if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+    return 'Camera permission denied.\n\nGo to your browser settings and allow camera access for this page, then reload.';
+  }
+  if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+    return 'No camera found on this device.';
+  }
+  if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+    return 'Camera is in use by another app.\n\nClose other apps that may be using the camera, then try again.';
+  }
+  if (err.name === 'OverconstrainedError') {
+    return 'Camera constraints could not be satisfied. Try a different browser.';
+  }
+  if (err.name === 'SecurityError') {
+    return 'Camera blocked for security reasons.\n\nThis app must be served over HTTPS (not http:// or file://).';
+  }
+  return 'Camera error: ' + err.message;
 }
 
 /* =====================================================================
    CAPTURE + PROCESS
 ===================================================================== */
 async function captureAndCount() {
-  if (!stream) return;
+  if (!stream || !video.videoWidth) {
+    setStatus('Camera not ready — tap Start Camera first');
+    return;
+  }
 
   showProcessing(true);
   await tick(30);
