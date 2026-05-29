@@ -827,39 +827,43 @@ function analyzeCanvas(w,h) {
   // ════════════════════════════════════════════════════════════════════
   if (scanMode === 'countAll') {
 
-    // Step A: Box blur (separable, r=2) — smooths noise before thresholding
-    const blurred = boxBlur(sig, w, h, 2);
+    // Step A: Box blur r=3 — more aggressive noise reduction before thresholding
+    const blurred = boxBlur(sig, w, h, 3);
 
-    // Step B: Adaptive threshold (Bradley method with integral image).
-    //   Window = 1/7 of image width; sensitivity tunable via slider.
-    //   Unlike global Otsu, this handles tiles in varying light conditions.
-    const adaptK = Math.max(0.05, Math.min(0.40, 0.18 - sensOffset * 0.004));
-    const binRaw = adaptiveThreshold(blurred, w, h, 1/7, adaptK);
+    // Step B: Adaptive threshold (Bradley, integral image, O(n)).
+    //   Window = 1/6 image width (tighter neighbourhood → better local contrast).
+    //   k slider shifts sensitivity: higher k = easier to detect (more foreground).
+    const adaptK = Math.max(0.05, Math.min(0.45, 0.20 - sensOffset * 0.004));
+    const binRaw = adaptiveThreshold(blurred, w, h, 1/6, adaptK);
 
-    // Step C: Morphological closing (dilate r=2 then erode r=2).
-    //   Dots on rounded domino surfaces often have a specular highlight at
-    //   the centre, making them appear as rings rather than solid circles.
-    //   Closing fills those gaps so the blob filter keeps them.
-    const binClosed = morphClose(binRaw, w, h, 2);
+    // Step C: Morphological closing r=3.
+    //   Larger radius fills wider specular-highlight rings on glossy dots.
+    const binClosed = morphClose(binRaw, w, h, 3);
 
     // Step D: Connected components
     const blobs = cc(binClosed, w, h);
 
-    // Step E: Shape filter — no fixed size limit yet; reject only obviously
-    //   wrong shapes (divider bars, tile borders, stray noise)
+    // Step E: Strict circular-shape filter.
+    //   Dots are circles: bounding-box aspect ≥ 0.50, fill ≥ 0.45 (circle=π/4≈0.78).
+    //   Tile edges, dividers, table reflections are long, thin, or sparse → rejected.
+    const minDotArea = Math.max(25, area * 0.000025); // scale with resolution
     const shaped = blobs.filter(b => {
-      if (b.size < 5 || b.size > area * 0.10) return false;
+      if (b.size < minDotArea || b.size > area * 0.03) return false;
       const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
-      // Reject elongated bars (dividers, tile edges)
-      if (Math.min(bw,bh) / Math.max(bw,bh) < 0.22) return false;
-      // Reject very sparse blobs (irregular table reflections etc.)
-      if (b.size / (bw*bh) < 0.18) return false;
+      if (Math.min(bw,bh) / Math.max(bw,bh) < 0.50) return false; // must be roundish
+      if (b.size / (bw*bh) < 0.45) return false;                   // must be solid
       return true;
     });
 
-    // Step F: Adaptive size calibration via log-histogram clustering.
-    //   All dots in a set are the same physical size → tight log-space cluster.
-    const dots = filterByDominantSize(shaped);
+    // Step F: Dominant size clustering ±1.0 octave (2× range).
+    //   Dots on one set of tiles are all the same physical size.
+    //   Tighter window than before to reject stray blobs near dot size.
+    const sized = filterByDominantSize(shaped, 1.0);
+
+    // Step G: Non-maximum suppression.
+    //   Specular highlights can split one dot into multiple close blobs.
+    //   Keep only the largest blob when centers overlap within their radii.
+    const dots = nms(sized);
 
     return { dots, half1:dots, half2:[], count1:dots.length, count2:0,
              total:dots.length, w, h, countAllMode:true };
@@ -875,10 +879,10 @@ function analyzeCanvas(w,h) {
   const blobs = cc(bin,w,h);
 
   const dots = blobs.filter(b=>{
-    if(b.size<area*0.0003||b.size>area*0.06) return false;
+    if(b.size<area*0.0003||b.size>area*0.04) return false;
     const bw=b.maxX-b.minX+1, bh=b.maxY-b.minY+1;
-    if(Math.min(bw,bh)/Math.max(bw,bh)<0.3) return false;
-    if(b.size/(bw*bh)<0.3) return false;
+    if(Math.min(bw,bh)/Math.max(bw,bh)<0.50) return false; // roundish
+    if(b.size/(bw*bh)<0.45) return false;                   // solid fill
     return true;
   });
 
@@ -1023,13 +1027,13 @@ function morphErode(bin, w, h, r) {
 /* Adaptive size calibration via log-histogram peak detection.
    Dots in a domino set are all the same physical size, so their pixel
    areas cluster tightly in log-space even across different camera distances.
-   We find the peak cluster and keep only blobs within ±1.5 octaves of it. */
-function filterByDominantSize(blobs) {
+   octaves controls the acceptance window around the peak (default ±1.0). */
+function filterByDominantSize(blobs, octaves = 1.0) {
   if (blobs.length < 2) return blobs;
-  const BINS = 28;
+  const BINS = 32;
   const logSizes = blobs.map(b => Math.log2(b.size));
   const minL = Math.min(...logSizes), maxL = Math.max(...logSizes);
-  if (maxL - minL < 0.8) return blobs; // already tight — keep all
+  if (maxL - minL < 0.5) return blobs; // already very tight — keep all
 
   const hist = new Array(BINS).fill(0);
   logSizes.forEach(ls => {
@@ -1040,9 +1044,30 @@ function filterByDominantSize(blobs) {
   const smooth = hist.map((v,i) => (hist[i-1]||0)*0.25 + v*0.5 + (hist[i+1]||0)*0.25);
   const peakBin  = smooth.indexOf(Math.max(...smooth));
   const peakLog  = minL + (peakBin + 0.5) / BINS * (maxL - minL);
-  const minSize  = Math.pow(2, peakLog - 1.5);
-  const maxSize  = Math.pow(2, peakLog + 1.5);
+  const minSize  = Math.pow(2, peakLog - octaves);
+  const maxSize  = Math.pow(2, peakLog + octaves);
   return blobs.filter(b => b.size >= minSize && b.size <= maxSize);
+}
+
+/* Non-maximum suppression — prevents one physical dot from being counted twice.
+   A specular highlight can split a dot into concentric ring blobs. After closing
+   these might still produce 2 nearby detections. Keep the larger when their
+   estimated radii overlap significantly. */
+function nms(blobs) {
+  // Sort largest-first so the dominant blob wins ties
+  const sorted = blobs.slice().sort((a,b) => b.size - a.size);
+  const keep = [];
+  for (const b of sorted) {
+    const rb = Math.sqrt(b.size / Math.PI);
+    const overlap = keep.some(k => {
+      const dx = b.cx - k.cx, dy = b.cy - k.cy;
+      const rk = Math.sqrt(k.size / Math.PI);
+      // Suppress if centers are closer than 65% of the sum of radii
+      return Math.sqrt(dx*dx + dy*dy) < (rb + rk) * 0.65;
+    });
+    if (!overlap) keep.push(b);
+  }
+  return keep;
 }
 
 function otsu(data){
