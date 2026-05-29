@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Lam Mexican Train v2.2</title>
+  <title>Lam Mexican Train v2.3</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -422,6 +422,31 @@
       flex:1; padding: 10px; border-radius: 8px; border: none;
       background: var(--green); color: #000; font-weight: 700; font-size: 14px; cursor: pointer;
     }
+    /* Editable score cells */
+    .editable-score { cursor: pointer; position: relative; }
+    .editable-score:active { background: rgba(255,255,255,0.08); }
+    .edit-hint {
+      font-size: 9px; color: var(--text3); margin-left: 3px;
+      vertical-align: super; line-height: 1;
+    }
+
+    /* Score-edit modal — reuses tile-edit styles */
+    #score-edit-modal {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+    }
+    #score-edit-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px 20px; width: 260px;
+      display: flex; flex-direction: column; gap: 14px; text-align: center;
+    }
+    .se-title { font-size: 13px; font-weight: 700; color: var(--text2); line-height: 1.4; }
+    #se-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: #fff; font-size: 34px; font-weight: 900; text-align: center;
+      border-radius: 8px; padding: 10px;
+    }
+
     /* Save toast */
     #save-toast {
       position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
@@ -578,7 +603,7 @@
   <div id="cam-wrap">
     <div id="start-screen">
       <div class="icon">🁣</div>
-      <h2>Lam Mexican Train v2.2</h2>
+      <h2>Lam Mexican Train v2.3</h2>
       <p>Point your camera at your remaining tiles to count dots. Use the Scoreboard tab to track your Mexican Train game.</p>
       <button class="btn btn-capture" style="max-width:220px;margin-top:8px;flex:none" onclick="startCamera()">📷 Start Camera</button>
       <p style="font-size:12px;color:#555;margin-top:4px">Works best in good lighting</p>
@@ -722,6 +747,18 @@
     <div class="te-btns">
       <button class="te-btn-save" onclick="saveTileEdit()">Save</button>
       <button class="te-btn-cancel" onclick="closeTileEdit()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- SCORE EDIT MODAL -->
+<div id="score-edit-modal">
+  <div id="score-edit-box">
+    <div class="se-title" id="se-title"></div>
+    <input type="number" id="se-input" inputmode="numeric" min="0" placeholder="0">
+    <div class="te-btns">
+      <button class="te-btn-save" onclick="saveScoreEdit()">Save</button>
+      <button class="te-btn-cancel" onclick="closeScoreEdit()">Cancel</button>
     </div>
   </div>
 </div>
@@ -1451,14 +1488,15 @@ function refreshGameView(){
   const minTotal=sorted[0]?.total??0;
   const tbody=document.getElementById('table-body');
   tbody.innerHTML='';
-  players.forEach(p=>{
+  players.forEach((p,pi)=>{
     const isLeading=p.total===minTotal&&currentRound>1&&p.scores.length>0;
     const tr=document.createElement('tr');
     if(isLeading) tr.className='winner-row';
     let cells=`<td>${isLeading?'<span class="crown">👑</span>':''} ${p.name}</td>`;
     for(let r=0;r<currentRound-1;r++){
       const s=p.scores[r];
-      cells+=`<td class="score-cell${s===0?' score-zero':''}">${s!=null?s:'–'}</td>`;
+      // Tappable: opens score-edit modal
+      cells+=`<td class="score-cell editable-score${s===0?' score-zero':''}" onclick="editScore(${pi},${r})">${s!=null?s:'–'}<span class="edit-hint">✎</span></td>`;
     }
     // Current round column (pending)
     if(p.scores.length<currentRound) cells+=`<td class="current-round-col">–</td>`;
@@ -1652,6 +1690,32 @@ function populateTileSelect(id, maxTile, selected) {
     if (t === parseInt(selected)) opt.selected = true;
     sel.appendChild(opt);
   }
+}
+
+function editScore(pi, ri) {
+  const p = players[pi];
+  document.getElementById('se-title').textContent =
+    `${p.name} — Round ${ri + 1}`;
+  const inp = document.getElementById('se-input');
+  inp.value = p.scores[ri] != null ? p.scores[ri] : '';
+  inp.dataset.pi = pi;
+  inp.dataset.ri = ri;
+  document.getElementById('score-edit-modal').style.display = 'flex';
+  inp.focus(); inp.select();
+}
+function saveScoreEdit() {
+  const inp = document.getElementById('se-input');
+  const pi = parseInt(inp.dataset.pi), ri = parseInt(inp.dataset.ri);
+  const val = Math.max(0, parseInt(inp.value) || 0);
+  players[pi].scores[ri] = val;
+  // Recalculate total
+  players[pi].total = players[pi].scores.reduce((s, v) => s + (v || 0), 0);
+  document.getElementById('score-edit-modal').style.display = 'none';
+  refreshGameView();
+  saveGame();
+}
+function closeScoreEdit() {
+  document.getElementById('score-edit-modal').style.display = 'none';
 }
 
 function editRoundTile(r){
