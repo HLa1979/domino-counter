@@ -1339,6 +1339,42 @@ function addPlayerInput(name=''){
   row.querySelector('input').focus();
 }
 
+/* =====================================================================
+   PERSISTENCE — save/restore game state via localStorage
+   MUST be defined before initApp() runs so SAVE_KEY is in scope.
+===================================================================== */
+const SAVE_KEY = 'lamMexicanTrain_save';
+
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      players, currentRound, maxRounds, gamePhase, roundTiles,
+      savedAt: Date.now()
+    }));
+    const t = document.getElementById('save-toast');
+    if (t) { t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1800); }
+  } catch(e) {}
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s.players || !s.players.length || !s.gamePhase) return false;
+    players      = s.players;
+    currentRound = s.currentRound || 1;
+    maxRounds    = s.maxRounds    ?? 13;
+    gamePhase    = s.gamePhase;
+    roundTiles   = s.roundTiles   || [];
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
+}
+
 // On load: restore saved game or show default setup
 (function initApp(){
   if (loadGame() && (gamePhase === 'playing' || gamePhase === 'gameover')) {
@@ -1651,42 +1687,6 @@ function newGame(){
   document.getElementById('player-inputs').innerHTML='';
   ['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
   showTab('game');
-}
-
-/* =====================================================================
-   PERSISTENCE — save/restore game state via localStorage
-===================================================================== */
-const SAVE_KEY = 'lamMexicanTrain_save';
-
-function saveGame() {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({
-      players, currentRound, maxRounds, gamePhase, roundTiles,
-      savedAt: Date.now()
-    }));
-    // Brief toast
-    const t = document.getElementById('save-toast');
-    if (t) { t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1800); }
-  } catch(e) { /* storage full or private mode — silently skip */ }
-}
-
-function loadGame() {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return false;
-    const s = JSON.parse(raw);
-    if (!s.players || !s.players.length || !s.gamePhase) return false;
-    players      = s.players;
-    currentRound = s.currentRound || 1;
-    maxRounds    = s.maxRounds    ?? 13;
-    gamePhase    = s.gamePhase;
-    roundTiles   = s.roundTiles   || [];
-    return true;
-  } catch(e) { return false; }
-}
-
-function clearSave() {
-  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
 }
 
 /* =====================================================================
