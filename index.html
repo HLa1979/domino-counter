@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Lam Domino Game Counter v2.1</title>
+  <title>Lam Mexican Train v2.2</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -308,6 +308,14 @@
       white-space: nowrap;
     }
     thead th:first-child { text-align: left; min-width: 90px; }
+    .th-tile {
+      font-size: 10px; font-weight: 700; color: var(--green);
+      margin-top: 3px; cursor: pointer; line-height: 1;
+      background: rgba(29,185,84,0.12); border-radius: 4px;
+      padding: 1px 4px; display: inline-block;
+    }
+    .th-tile-empty { color: var(--text3); background: rgba(255,255,255,0.05); }
+    .th-tile:active { opacity: 0.7; }
     tbody tr { border-bottom: 1px solid rgba(30,48,96,0.5); }
     tbody tr.winner-row td { color: var(--green); }
     tbody td {
@@ -377,7 +385,57 @@
       flex-shrink: 0;
     }
     #scoring-header h2 { font-size:16px; font-weight:700; margin-bottom:2px; }
-    #scoring-header .sub { font-size:12px; color:var(--text2); }
+    #scoring-header .sub { font-size:12px; color:var(--text2); margin-bottom:8px; }
+    #sc-tile-row {
+      display: flex; align-items: center; gap: 10px; margin-top: 8px;
+      background: rgba(29,185,84,0.08); border: 1px solid rgba(29,185,84,0.25);
+      border-radius: 8px; padding: 6px 12px;
+    }
+    #sc-tile-row label { font-size:12px; color:var(--green); font-weight:600; flex:1; }
+    #sc-tile-num, #te-input {
+      background: var(--bg); border: 1px solid var(--border);
+      color: #fff; font-size: 15px; font-weight: 700;
+      border-radius: 6px; padding: 6px 10px; cursor: pointer;
+      appearance: none; -webkit-appearance: none;
+    }
+    #sc-tile-num { width: auto; }
+    #te-input { width: 100%; font-size: 18px; padding: 10px; text-align: center; }
+
+    /* Tile-edit modal */
+    #tile-edit-modal {
+      display: none; position: fixed; inset: 0; z-index: 100;
+      background: rgba(0,0,0,0.7); align-items: center; justify-content: center;
+    }
+    #tile-edit-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px 20px; width: 240px;
+      display: flex; flex-direction: column; gap: 14px; text-align: center;
+    }
+    .te-title { font-size: 14px; font-weight: 700; color: var(--green); }
+    #te-input {
+      width: 100%; background: var(--bg); border: 1px solid var(--border);
+      color: #fff; font-size: 28px; font-weight: 900; text-align: center;
+      border-radius: 8px; padding: 8px;
+    }
+    .te-btns { display: flex; gap: 10px; }
+    .te-btn-save {
+      flex:1; padding: 10px; border-radius: 8px; border: none;
+      background: var(--green); color: #000; font-weight: 700; font-size: 14px; cursor: pointer;
+    }
+    /* Save toast */
+    #save-toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px);
+      background: rgba(29,185,84,0.92); color: #000; font-size: 13px; font-weight: 700;
+      padding: 7px 16px; border-radius: 20px; z-index: 200;
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+    #save-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    .te-btn-cancel {
+      flex:1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--text2); font-size: 14px; cursor: pointer;
+    }
 
     #scoring-body {
       flex:1; overflow-y:auto;
@@ -520,8 +578,8 @@
   <div id="cam-wrap">
     <div id="start-screen">
       <div class="icon">🁣</div>
-      <h2>Lam Domino Game Counter v2.1</h2>
-      <p>Point your camera at a domino tile to count its dots. Use the Scoreboard tab to track your game.</p>
+      <h2>Lam Mexican Train v2.2</h2>
+      <p>Point your camera at your remaining tiles to count dots. Use the Scoreboard tab to track your Mexican Train game.</p>
       <button class="btn btn-capture" style="max-width:220px;margin-top:8px;flex:none" onclick="startCamera()">📷 Start Camera</button>
       <p style="font-size:12px;color:#555;margin-top:4px">Works best in good lighting</p>
       <p id="https-warning" style="font-size:11px;color:var(--red);margin-top:4px;display:none">⚠️ Requires HTTPS for camera access</p>
@@ -653,11 +711,30 @@
 
 </div>
 
+<!-- SAVE TOAST -->
+<div id="save-toast">💾 Game saved</div>
+
+<!-- TILE EDIT MODAL -->
+<div id="tile-edit-modal">
+  <div id="tile-edit-box">
+    <div class="te-title">Round <span id="te-round"></span> — Tile #</div>
+    <select id="te-input"></select>
+    <div class="te-btns">
+      <button class="te-btn-save" onclick="saveTileEdit()">Save</button>
+      <button class="te-btn-cancel" onclick="closeTileEdit()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- SCORING OVERLAY -->
 <div id="gs-scoring">
   <div id="scoring-header">
     <h2>Score Round <span id="sc-round-num"></span></h2>
     <div class="sub">Enter each player's remaining tile dots</div>
+    <div id="sc-tile-row">
+      <label for="sc-tile-num">Tile #</label>
+      <select id="sc-tile-num"></select>
+    </div>
   </div>
   <div id="scoring-body"></div>
   <div id="scoring-footer">
@@ -687,6 +764,7 @@ let gamePhase    = 'setup'; // 'setup'|'playing'|'gameover'
 let scoringMode      = false;
 let scoringPlayerIdx = -1;  // which player we're scanning for
 let roundDotCounts   = [];  // dot counts for current round being scored [per player]
+let roundTiles       = [];  // engine tile number used for each completed round
 
 // HTTPS check
 if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
@@ -1261,8 +1339,21 @@ function addPlayerInput(name=''){
   row.querySelector('input').focus();
 }
 
-// Default 4 player slots
-['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
+// On load: restore saved game or show default setup
+(function initApp(){
+  if (loadGame() && (gamePhase === 'playing' || gamePhase === 'gameover')) {
+    // Saved game found — jump straight to scoreboard
+    document.getElementById('round-chip').style.display = gamePhase==='playing' ? 'block' : 'none';
+    document.getElementById('gs-setup').style.display   = 'none';
+    document.getElementById('gs-board').style.display   = gamePhase==='playing' ? 'flex' : 'none';
+    document.getElementById('gs-gameover').style.display= gamePhase==='gameover'? 'block': 'none';
+    refreshGameView();
+    showTab('game');
+  } else {
+    // No save — default 4 player slots
+    ['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
+  }
+})();
 
 function startGame(){
   const inputs=[...document.querySelectorAll('#player-inputs input')];
@@ -1279,6 +1370,7 @@ function startGame(){
   document.getElementById('gs-board').style.display='flex';
   document.getElementById('gs-gameover').style.display='none';
   refreshGameView();
+  saveGame();
 }
 
 /* =====================================================================
@@ -1308,7 +1400,13 @@ function refreshGameView(){
   // Build table header
   const thead=document.getElementById('table-head');
   let headHTML='<tr><th>Player</th>';
-  for(let r=1;r<=currentRound;r++) headHTML+=`<th>R${r}</th>`;
+  for(let r=1;r<=currentRound;r++){
+    const tile = roundTiles[r-1];
+    const tileChip = tile != null
+      ? `<div class="th-tile" onclick="editRoundTile(${r})">🎲${tile}</div>`
+      : (r < currentRound ? `<div class="th-tile th-tile-empty" onclick="editRoundTile(${r})">🎲?</div>` : '');
+    headHTML += `<th>${r < currentRound ? `R${r}` : `<span style="color:#fff">R${r}</span>`}${tileChip}</th>`;
+  }
   headHTML+='<th style="color:#fff">Total</th></tr>';
   thead.innerHTML=headHTML;
 
@@ -1342,6 +1440,12 @@ function openScoring(){
   scoringMode=false; scoringPlayerIdx=-1;
 
   document.getElementById('sc-round-num').textContent=currentRound;
+
+  // Populate tile # dropdown based on domino set
+  const startTile = maxRounds > 0 ? maxRounds - 1 : 15;
+  const defaultTile = maxRounds > 0 ? Math.max(0, startTile - (currentRound - 1)) : '';
+  const savedTile = roundTiles[currentRound-1];
+  populateTileSelect('sc-tile-num', startTile, savedTile != null ? savedTile : defaultTile);
 
   const body=document.getElementById('scoring-body');
   body.innerHTML='';
@@ -1429,6 +1533,10 @@ function returnToScoring(){
 }
 
 function confirmRound(){
+  // Save tile # for this round
+  const tileVal = document.getElementById('sc-tile-num').value;
+  roundTiles[currentRound-1] = tileVal !== '' ? parseInt(tileVal) : null;
+
   // Parse any manually edited counts
   players.forEach((_,i)=>{
     const el=document.getElementById('sc-count-'+i);
@@ -1454,6 +1562,7 @@ function confirmRound(){
 
   showTab('game');
   refreshGameView();
+  saveGame();
 }
 
 function cancelScoring(){
@@ -1474,6 +1583,7 @@ function endGame(){
   gamePhase='gameover';
   refreshGameView();
   showTab('game');
+  saveGame();
 }
 
 function renderGameOver(){
@@ -1494,8 +1604,44 @@ function confirmNewGame(){
   newGame();
 }
 
+/* Populate a <select> element with tile numbers from maxTile down to 0.
+   selected: the value to pre-select. */
+function populateTileSelect(id, maxTile, selected) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '';
+  for (let t = maxTile; t >= 0; t--) {
+    const opt = document.createElement('option');
+    opt.value = t;
+    opt.textContent = `Tile ${t}`;
+    if (t === parseInt(selected)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+function editRoundTile(r){
+  document.getElementById('te-round').textContent = r;
+  const startTile = maxRounds > 0 ? maxRounds - 1 : 15;
+  const saved = roundTiles[r-1];
+  populateTileSelect('te-input', startTile, saved != null ? saved : Math.max(0, startTile - (r-1)));
+  document.getElementById('te-input').dataset.round = r;
+  document.getElementById('tile-edit-modal').style.display = 'flex';
+}
+function saveTileEdit(){
+  const inp = document.getElementById('te-input');
+  const r = parseInt(inp.dataset.round);
+  roundTiles[r-1] = inp.value !== '' ? parseInt(inp.value) : null;
+  document.getElementById('tile-edit-modal').style.display = 'none';
+  refreshGameView();
+  saveGame();
+}
+function closeTileEdit(){
+  document.getElementById('tile-edit-modal').style.display = 'none';
+}
+
 function newGame(){
+  clearSave();
   players=[];currentRound=1;maxRounds=13;gamePhase='setup';
+  roundTiles=[];
   document.getElementById('rounds-select').value='13';
   scoringMode=false;scoringPlayerIdx=-1;
   document.getElementById('round-chip').style.display='none';
@@ -1505,6 +1651,42 @@ function newGame(){
   document.getElementById('player-inputs').innerHTML='';
   ['','','',''].forEach((_,i)=>addPlayerInput('Player '+(i+1)));
   showTab('game');
+}
+
+/* =====================================================================
+   PERSISTENCE — save/restore game state via localStorage
+===================================================================== */
+const SAVE_KEY = 'lamMexicanTrain_save';
+
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      players, currentRound, maxRounds, gamePhase, roundTiles,
+      savedAt: Date.now()
+    }));
+    // Brief toast
+    const t = document.getElementById('save-toast');
+    if (t) { t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 1800); }
+  } catch(e) { /* storage full or private mode — silently skip */ }
+}
+
+function loadGame() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return false;
+    const s = JSON.parse(raw);
+    if (!s.players || !s.players.length || !s.gamePhase) return false;
+    players      = s.players;
+    currentRound = s.currentRound || 1;
+    maxRounds    = s.maxRounds    ?? 13;
+    gamePhase    = s.gamePhase;
+    roundTiles   = s.roundTiles   || [];
+    return true;
+  } catch(e) { return false; }
+}
+
+function clearSave() {
+  try { localStorage.removeItem(SAVE_KEY); } catch(e) {}
 }
 
 /* =====================================================================
