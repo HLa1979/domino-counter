@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Lam Mexican Train v2.6</title>
+  <title>Lam Mexican Train v2.9</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
@@ -633,7 +633,7 @@
   <div id="cam-wrap">
     <div id="start-screen">
       <div class="icon">🁣</div>
-      <h2>Lam Mexican Train v2.6</h2>
+      <h2>Lam Mexican Train v2.9</h2>
       <p>Point your camera at your remaining tiles to count dots. Use the Scoreboard tab to track your Mexican Train game.</p>
       <button class="btn btn-capture" style="max-width:220px;margin-top:8px;flex:none" onclick="startCamera()">📷 Start Camera</button>
       <p style="font-size:12px;color:#555;margin-top:4px">Works best in good lighting</p>
@@ -961,70 +961,85 @@ function analyzeCanvas(w,h) {
   // ════════════════════════════════════════════════════════════════════
   //  COUNT-ALL MODE  — photograph all remaining tiles at once
   //
-  //  Pipeline (v2.6):
-  //   blur → TILE MASK → mask signal → Otsu threshold → morph close
-  //   → components → shape filter → size cluster → NMS
+  //  Pipeline (v2.9):
+  //   blur → tile-surface percentile → tile mask (dilated) → Otsu on TILE PIXELS ONLY
+  //   → threshold+mask → morph close → CC → shape filter → size cluster → NMS
   //
-  //  KEY NEW STEP — Tile mask:
-  //   Pixels very close to background colour are "tile surface". We dilate
-  //   that region to cover full tile area (including the dots themselves).
-  //   Everything outside the mask (dark table, hand, camera strap, etc.)
-  //   is zeroed out BEFORE thresholding, eliminating the #1 source of false
-  //   positives with the old adaptive-threshold approach.
+  //  Key fix v2.9: Otsu is now computed on tile pixels only (not the whole image).
+  //   The previous version zeroed non-tile pixels then ran Otsu on the full array.
+  //   The zero spike dominated the histogram → threshold ≈ 1 → entire tile area
+  //   became foreground (one blob per tile, not per dot) → wildly wrong counts.
   // ════════════════════════════════════════════════════════════════════
   if (scanMode === 'countAll') {
 
-    // Step A: Light blur (r=2) — smooth sensor noise without merging adjacent dots
-    const blurred = boxBlur(sig, w, h, 2);
+    // Step A: Minimal blur (r=1) — just enough to smooth single-pixel noise.
+    //   r=2 spreads signal 4px per side which risks merging dots on dense tiles (10-pip).
+    const blurred = boxBlur(sig, w, h, 1);
 
     // Step B: Tile-surface mask
-    //   "Tile surface" pixels have signal close to 0 (same colour as bg estimate).
-    //   Use 30% of the global Otsu threshold as the tile-surface ceiling.
-    const rawOtsu = otsu(blurred);
-    const tileFloor = Math.max(8, rawOtsu * 0.30);
+    //   Find the tile-surface signal ceiling using two strategies and take the lower:
+    //   1. 30th percentile of the signal histogram (tiles often ~20-30% of frame)
+    //   2. Hard cap at 50 — white tile surface is always < 50 signal from a white bg.
+    //   The cap is critical: if tiles are small in frame (<30% of pixels), the 30th
+    //   percentile lands in the gray/table region (signal 70+), which would pull table
+    //   pixels into the tile mask and corrupt the Otsu step.
+    const sigHist = new Int32Array(256);
+    for (let i = 0; i < area; i++) sigHist[blurred[i]]++;
+    let cumul = 0, tileFloor = 20;
+    for (let v = 0; v < 256; v++) {
+      cumul += sigHist[v];
+      if (cumul >= area * 0.30) { tileFloor = Math.min(50, Math.max(8, v)); break; }
+    }
     const tileSurface = new Uint8Array(area);
     for (let i = 0; i < area; i++) tileSurface[i] = blurred[i] <= tileFloor ? 1 : 0;
 
-    // Dilate the tile-surface mask to cover the dots sitting on top of the tiles.
-    // Radius ≈ 4% of image width — enough to swallow any dot above a tile surface.
-    const dilR = Math.max(8, Math.floor(w * 0.04));
+    // Dilate tile-surface mask to cover dots that sit on top of tiles.
+    const dilR = Math.max(10, Math.floor(w * 0.04));
     const tileMask = morphDilate(tileSurface, w, h, dilR);
 
-    // Step C: Apply mask — non-tile pixels become 0
-    const maskedSig = new Uint8Array(area);
-    for (let i = 0; i < area; i++) maskedSig[i] = tileMask[i] ? blurred[i] : 0;
+    // Step C: Collect ONLY tile-pixel signal values for Otsu.
+    //   CRITICAL BUG FIX: the previous version zeroed non-tile pixels then ran Otsu on
+    //   the whole array. The zero-spike dominated the histogram so Otsu set threshold ≈ 1,
+    //   making the ENTIRE tile area foreground (one big blob per tile, not per dot).
+    //   Fix: build an array of only the non-zero tile pixel values and run Otsu on that.
+    let tileCnt = 0;
+    for (let i = 0; i < area; i++) if (tileMask[i]) tileCnt++;
+    const tileArr = new Uint8Array(tileCnt);
+    let ti = 0;
+    for (let i = 0; i < area; i++) if (tileMask[i]) tileArr[ti++] = blurred[i];
 
-    // Step D: Global Otsu threshold on the masked signal.
-    //   Now the only foreground pixels are dots on tiles — Otsu is very reliable here.
-    //   Sensitivity slider shifts the cut-point: +ve = lower threshold = more dots detected.
-    const maskedOtsu = otsu(maskedSig);
-    const thr = Math.max(6, Math.min(240, maskedOtsu - sensOffset * 2));
+    // Step D: Otsu on tile pixels → correct split between tile-surface and dots.
+    //   Sensitivity slider shifts the cut: positive = lower threshold = detect more.
+    const tileOtsu = tileCnt > 200 ? otsu(tileArr) : 80;
+    const thr = Math.max(6, Math.min(240, tileOtsu - sensOffset * 2));
+
+    // Step E (replaces old C+D): threshold AND tile mask applied together in one pass.
     const bin = new Uint8Array(area);
-    for (let i = 0; i < area; i++) bin[i] = maskedSig[i] >= thr ? 1 : 0;
+    for (let i = 0; i < area; i++) {
+      bin[i] = (tileMask[i] && blurred[i] >= thr) ? 1 : 0;
+    }
 
-    // Step E: Morphological closing (r=2)
-    //   Fills specular-highlight gaps in rounded-dot centres (ring → solid circle).
-    const binClosed = morphClose(bin, w, h, 2);
+    // Step F: Morphological closing (r=1) — fills 1-px specular-highlight gaps.
+    //   r=2 was too aggressive: on dense 10-pip halves, 4px spread merges adjacent dots.
+    const binClosed = morphClose(bin, w, h, 1);
 
-    // Step F: Connected components
+    // Step G: Connected components
     const blobs = cc(binClosed, w, h);
 
-    // Step G: Shape filter — relaxed to accept dots photographed at a slight angle.
-    //   A perfectly circular dot becomes slightly oval when the camera is not overhead.
-    //   aspect ≥ 0.38 (was 0.50), fill ≥ 0.35 (was 0.45).
+    // Step H: Shape filter — dots are circles, even from a slight angle
     const minDotPx = Math.max(15, area * 0.000012);
     const shaped = blobs.filter(b => {
       if (b.size < minDotPx || b.size > area * 0.04) return false;
       const bw = b.maxX - b.minX + 1, bh = b.maxY - b.minY + 1;
-      if (Math.min(bw,bh) / Math.max(bw,bh) < 0.38) return false; // roughly round
-      if (b.size / (bw*bh) < 0.35) return false;                   // mostly filled
+      if (Math.min(bw,bh) / Math.max(bw,bh) < 0.38) return false;
+      if (b.size / (bw*bh) < 0.35) return false;
       return true;
     });
 
-    // Step H: Dominant size clustering ±1.2 octave (~2.3× range)
+    // Step I: Dominant size clustering ±1.2 octave
     const sized = filterByDominantSize(shaped, 1.2);
 
-    // Step I: NMS — deduplicate any blobs from the same physical dot
+    // Step J: NMS — deduplicate blobs from the same physical dot
     const dots = nms(sized);
 
     return { dots, half1:dots, half2:[], count1:dots.length, count2:0,
@@ -1236,8 +1251,9 @@ function nms(blobs) {
     const overlap = keep.some(k => {
       const dx = b.cx - k.cx, dy = b.cy - k.cy;
       const rk = Math.sqrt(k.size / Math.PI);
-      // Suppress if centers are closer than 65% of the sum of radii
-      return Math.sqrt(dx*dx + dy*dy) < (rb + rk) * 0.65;
+      // Suppress if centers are closer than 55% of the sum of radii
+      // (was 65% — tighter to preserve separate dots on dense 10-pip tiles)
+      return Math.sqrt(dx*dx + dy*dy) < (rb + rk) * 0.55;
     });
     if (!overlap) keep.push(b);
   }
